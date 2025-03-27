@@ -1,3 +1,5 @@
+const { getById, setDataPushIfNotExists } = require('./db');
+
 const OpenAI = require('openai').default;
 const openai = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
@@ -15,10 +17,19 @@ const BRANCH_REGEX = /(GEO|ADM|GDM)-\d+/g;
 const branchDetectionCache = new Map();
 
 async function detectBranchesWithAI(content) {
-    const cacheKey = content.substring(0, 100); // Use beginning as cache key
+    const cacheKey = content.substring(0, 100);
     if (branchDetectionCache.has(cacheKey)) {
+        console.log('INFO: detected branches (memory cache):', {branches:branchDetectionCache.get(cacheKey)});
         return branchDetectionCache.get(cacheKey);
     }
+
+    //fs cache
+    const branchDetection = await getById('branchDetection', cacheKey,'cacheKey')
+    if(branchDetection){
+        console.log('INFO: detected branches (fs cache):', {branches:branchDetection.branches});
+        return branchDetection.branches;
+    }
+
 
     const prompt = `
     Analyze this deployment request and identify all relevant branch names.
@@ -41,7 +52,7 @@ async function detectBranchesWithAI(content) {
 
     try {
         const completion = await openai.chat.completions.create({
-            model: "openai/gpt-4",
+            model: "openai/gpt-4o-mini-2024-07-18",
             messages: [{
                 role: "user",
                 content: prompt
@@ -50,21 +61,42 @@ async function detectBranchesWithAI(content) {
             temperature: 0.1
         });
 
-        const result = JSON.parse(completion.choices[0].message.content);
-        const branches = result.branches || [];
-        branchDetectionCache.set(cacheKey, branches);
-        return branches;
+        // Robust error checking
+        if (!completion?.choices?.[0]?.message?.content) {
+            console.error('AI response malformed:', { completion });
+            return [];
+        }
+
+        const responseText = completion.choices[0].message.content;
+        
+        try {
+            const result = JSON.parse(responseText);
+            const branches = result.branches || [];
+            branchDetectionCache.set(cacheKey, branches);
+
+            await setDataPushIfNotExists('branchDetection', {cacheKey, branches}, (item) => item.cacheKey === cacheKey)
+
+            console.log('INFO: detected branches (with AI):', {branches});
+            return branches;
+        } catch (parseError) {
+            console.error('Failed to parse AI response:', {
+                responseText,
+                error: parseError
+            });
+            return [];
+        }
     } catch (err) {
         console.error('AI branch detection failed:', {
             message: err.message,
             stack: err.stack,
-            axiosResponse: err.isAxiosError ? err.response?.data : undefined
+            axiosResponse: err.isAxiosError ? err.response?.data : undefined,
+            contentSnippet: content.substring(0, 100) + '...'
         });
         return [];
     }
 }
 
-function extractBranchesFromText(content) {
+async function extractBranchesFromText(content) {
     // First try direct regex matching
     const directMatches = content.match(BRANCH_REGEX) || [];
     if (directMatches.length > 0) {
@@ -72,7 +104,7 @@ function extractBranchesFromText(content) {
     }
 
     // Fall back to AI detection if no direct matches
-    return detectBranchesWithAI(content);
+    return await detectBranchesWithAI(content);
 }
 
 function parseVersion(version) {

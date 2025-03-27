@@ -43,7 +43,7 @@ async function cloneRepo() {
             const stats = await fs.stat(targetDir);
             if (stats) {
                 console.log(`src/gitlab.js ${functionName} Target directory already exists`, { targetDir });
-                return;
+                return targetDir;
             }
         } catch (err) {
             if (err.code !== 'ENOENT') throw err;

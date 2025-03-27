@@ -31,6 +31,14 @@ async function setData(key, value) {
     }
 }
 
+async function getById(key,id, idKey='id'){
+    const data = await getData(key)
+    if (!data) {
+        return null
+    }
+    return data.find(item => item[idKey] === id)
+}
+
 async function setDataPushIfNotExists(key, value, handler) {
     let data = await getData(key)
     if (!data) {
@@ -89,5 +97,6 @@ module.exports = {
     setData,
     setDataPushIfNotExists,
     setDataPushUpdateIfExists,
-    pruneDupes
+    pruneDupes,
+    getById
 }

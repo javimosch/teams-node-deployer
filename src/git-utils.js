@@ -1,58 +1,51 @@
-const { spawn } = require('child_process');
-const path = require('path');
+const { execSync } = require('child_process');
 
-async function executeGitCommand(cwd, args) {
-    return new Promise((resolve, reject) => {
-        const gitProcess = spawn('git', args, {
-            cwd,
-            stdio: ['ignore', 'pipe', 'pipe'],
-            env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
-        });
-
-        let stdoutData = '';
-        let stderrData = '';
-
-        gitProcess.stdout.on('data', (data) => {
-            stdoutData += data.toString();
-        });
-
-        gitProcess.stderr.on('data', (data) => {
-            stderrData += data.toString();
-        });
-
-        gitProcess.on('close', (code) => {
-            if (code === 0) {
-                resolve(stdoutData.trim());
-            } else {
-                reject(new Error(`Git command failed with code ${code}\nCommand: git ${args.join(' ')}\nStderr: ${stderrData}`));
-            }
-        });
-
-        gitProcess.on('error', (err) => {
-            reject(err);
-        });
-    });
+async function executeGitCommand(repoPath, command) {
+    try {
+        return execSync(`cd ${repoPath} && git ${command}`, { encoding: 'utf-8' });
+    } catch (err) {
+        console.error('Git command failed:', { command, error: err.message });
+        throw err;
+    }
 }
 
-async function checkoutBranch(cwd, branch) {
-    return executeGitCommand(cwd, ['checkout', branch]);
+async function isBranchMerged(repoPath, branchName) {
+    try {
+        const result = await executeGitCommand(repoPath, `branch --merged preprod`);
+        return result.includes(branchName);
+    } catch (err) {
+        console.error('Failed to check merged branches:', {
+            branchName,
+            error: err.message
+        });
+        return false;
+    }
 }
 
-async function resetHard(cwd, branch = 'origin/preprod') {
-    return executeGitCommand(cwd, ['reset', '--hard', branch]);
+async function checkoutBranch(repoPath, branchName) {
+    return executeGitCommand(repoPath, `checkout ${branchName}`);
 }
 
-async function pullBranch(cwd, branch) {
-    return executeGitCommand(cwd, ['pull', 'origin', branch]);
+async function resetHard(repoPath) {
+    return executeGitCommand(repoPath, `reset --hard origin/preprod`);
 }
 
-async function getLatestTag(cwd, branch) {
-    return executeGitCommand(cwd, ['tag', '--merged', branch, '--sort=-creatordate'])
-        .then(output => output.split('\n')[0] || '');
+async function pullBranch(repoPath, branchName) {
+    return executeGitCommand(repoPath, `pull origin ${branchName}`);
+}
+
+async function getLatestTag(repoPath, ref) {
+    try {
+        return (await executeGitCommand(repoPath, `tag --merged ${ref} --sort=-creatordate | head -1`)).trim();
+    } catch (err) {
+        console.error('Failed to get latest tag:', { ref, error: err.message });
+        return null;
+    }
 }
 
 module.exports = {
     executeGitCommand,
+    isBranchMerged,
     checkoutBranch,
     resetHard,
     pullBranch,
