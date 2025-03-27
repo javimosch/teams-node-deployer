@@ -1,0 +1,13 @@
+CLIENT_ID=xx
+TENANT_ID=xx
+CLIENT_SECRET=xx
+WEBHOOK_URL=https://08a0-81-185-175-161.ngrok-free.app/webhook
+BASE_URL=https://08a0-81-185-175-161.ngrok-free.app
+CRON_JOB_SCHEDULE=*/10 * * * * *
+
+GITLAB_ACCESS_TOKEN=xx
+GITLAB_REPO_NAME=georedv3
+
+OPENROUTER_API_KEY=xx
+
+APP_NAME=teams-node-catcher-local
