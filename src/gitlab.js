@@ -13,9 +13,6 @@ async function processDeployments() {
         deployments = deployments.filter(deployment => deployment.status !== 'processed');
         if (deployments.length > 0) {
             for (const deployment of deployments) {
-
-                
-
                 console.log('Processing deployment:', deployment);
                 await setDataPushUpdateIfExists('deployments', {
                     status: 'in_progress'
@@ -24,10 +21,11 @@ async function processDeployments() {
                 await deployTicket(deployment, repoPath);
 
                 await setDataPushUpdateIfExists('deployments', {
-                    status: 'processed'
+                    status: 'processed',
+                    repoPath
                 }, (item) => item.id === deployment.id);
             }
-        }else{
+        } else {
             console.log('No deployments to process');
         }
     } catch (err) {
@@ -43,6 +41,9 @@ async function processDeployments() {
 async function deployTicket(deployment, repoPath) {
     const functionName = 'deployTicket';
     let hasChanges = false;
+
+    deployment.processingBranchErrors = [];
+    deployment.processingLogs = [];
     
     try {
         console.log(`src/gitlab.js ${functionName} Starting deployment processing`, { deployment });
@@ -56,9 +57,14 @@ async function deployTicket(deployment, repoPath) {
 
         console.log(`src/gitlab.js ${functionName} Found branches to process`, { branches });
 
+
+        
+
         // 2. Process each branch
         for (const branch of branches) {
             try {
+                deployment.processingLogs = deployment.processingLogs || [];
+                
                 console.log(`src/gitlab.js ${functionName} Processing branch`, { branch });
 
                 // 2.1 Checkout preprod and reset
@@ -69,20 +75,52 @@ async function deployTicket(deployment, repoPath) {
                 const isMerged = await git.isBranchMerged(repoPath, branch);
                 if (isMerged) {
                     console.log(`src/gitlab.js ${functionName} Branch already merged`, { branch });
+                    deployment.processingLogs.push({
+                        branch,
+                        message: `Branch already merged`
+                    });
                     continue;
                 }
 
-                // 2.3 Pull branch
+                // 2.3 Pull branch with conflict handling
                 console.log(`src/gitlab.js ${functionName} Pulling branch`, { branch });
                 const pullResult = await git.pullBranch(repoPath, branch);
                 
-                // Check if pull actually made changes
-                if (!pullResult.includes('Already up to date')) {
-                    hasChanges = true;
+                if (!pullResult.success) {
+                    if (pullResult.error.includes('CONFLICT')) {
+                        console.log(`src/gitlab.js ${functionName} Merge conflict detected, skipping branch`, { branch });
+                        deployment.processingLogs.push({
+                            branch,
+                            message: `Merge conflict detected - skipped`
+                        });
+                        continue;
+                    }
+                    throw new Error(pullResult.error);
                 }
+
+                // Check if pull actually made changes
+                if (!pullResult.output.includes('Already up to date')) {
+                    hasChanges = true;
+                    deployment.processingLogs.push({
+                        branch,
+                        message: `Successfully merged`
+                    });
+                } else {
+                    deployment.processingLogs.push({
+                        branch,
+                        message: `No changes to merge`
+                    });
+                }
+
+                // Dedupe logs
+                deployment.processingLogs = deployment.processingLogs.filter((log, index) => {
+                    return deployment.processingLogs.findIndex(l => l.branch === log.branch) === index;
+                });
 
                 deployment.processedBranches = deployment.processedBranches || [];
                 deployment.processedBranches.push(branch);
+                deployment.processedBranches = [...new Set(deployment.processedBranches)];
+                
                 await setDataPushUpdateIfExists('deployments', {
                     ...deployment
                 }, (item) => item.id === deployment.id);
@@ -94,17 +132,15 @@ async function deployTicket(deployment, repoPath) {
                     stack: err.stack
                 });
                 
-                deployment.processingBranchErrors = deployment.processingBranchErrors || {}
+                deployment.processingBranchErrors = deployment.processingBranchErrors || [];
                 deployment.processingBranchErrors.push({
                     branch,
                     message: err.message,
                     stack: err.stack
-                })
+                });
                 await setDataPushUpdateIfExists('deployments', {
                     ...deployment
                 }, (item) => item.id === deployment.id);
-
-
                 continue;
             }
         }
@@ -126,21 +162,32 @@ async function deployTicket(deployment, repoPath) {
             nextTag
         });
 
-        // 5. Output result and exit
+        // 5. Output result and update deployment
         console.log(`Next tag would be ${nextTag}`);
-
         await setDataPushUpdateIfExists('deployments', {
             ...deployment,
             nextTag
         }, (item) => item.id === deployment.id);
-        
 
     } catch (err) {
         console.log(`src/gitlab.js ${functionName} Deployment processing failed`, {
             message: err.message,
             stack: err.stack
         });
-        throw err;
+        
+        deployment.processingErrors = deployment.processingErrors || [];
+        deployment.processingErrors.push({
+            message: err.message,
+            stack: err.stack
+        });
+        await setDataPushUpdateIfExists('deployments', {
+            ...deployment
+        }, (item) => item.id === deployment.id);
+    }finally{
+        await setDataPushUpdateIfExists('deployments', {
+            processingBranchErrors: deployment.processingBranchErrors,
+            processingLogs: deployment.processingLogs
+        }, (item) => item.id === deployment.id);
     }
 }
 

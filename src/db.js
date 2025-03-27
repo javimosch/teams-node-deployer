@@ -23,9 +23,9 @@ async function setData(key, value) {
         const data = JSON.parse(await fs.promises.readFile('data.json', 'utf8'));
         data[key] = value;
         await fs.promises.writeFile('data.json', JSON.stringify(data, null, 2));
-        console.log(`${key} persisted successfully`, {
+        /* console.log(`${key} persisted successfully`, {
             value: typeof value === 'string' ? value.slice(0, 10) + '...' : '(Object)'
-        });
+        }) */;
     } catch (error) {
         console.error(`Error persisting ${key}:`, error);
     }
@@ -68,7 +68,7 @@ async function setDataPushUpdateIfExists(key, value, handler) {
             for(const key in value){
                 match[key] = value[key]
             }
-            console.log('Match found, updating', match,value)
+            //console.log('Match found, updating', match,value)
         }else{
             data.push(value)
         }
