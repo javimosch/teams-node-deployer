@@ -9,7 +9,7 @@ A deployment automation system that handles Git operations and version tagging f
 - A cron check for MS Teams channel messages (MESSAGE_PATTERN) and persist them
 - A cron check for saved messages and process them for deployment
 - Deployment process checks if detected branches can be merged into preprod and tag them (semantic versioning) (Check only)
-- TODO/WIP: A web UI shows the queue of pending deployments and allows to process/approve them manually
+- [TODO]: A web UI shows the queue of pending deployments and allows to process/approve them manually
 
 ## Assumptions
 
@@ -18,12 +18,17 @@ A deployment automation system that handles Git operations and version tagging f
 - You have a Microsoft Teams app registered with the necessary permissions
 - You have a GitLab API token with read/write access to the repository
 - You have a OpenRouter API key
-- Your gitlab repo target branch is `preprod`
-- Your branches are named like 'GEO-XXX', 'GDM-XXX', etc (see ai.js)
+- Your gitlab repo has a preprod and a prod branch
+- Your ticket branches follow a convention i.g 'GEO-XXX', 'GDM-XXX', etc (see ai.js) (BRANCH_NAMING_CONVENTIONS)
 
 ## Goal
 
 - Automatize integration of ticket branches into an environment branch and create a RC tag all from within a Microsoft Teams channel by sending a message like 'agent:deploy GEO-XXX'
+
+## Persistance
+
+- Current: FS (data.json)
+- [TODO]: NocoDB and mongo support
 
 ## Setup Instructions
 ```bash
@@ -59,6 +64,8 @@ GITLAB_REPO_NAME=georedv3
 
 # Branch detection
 OPENROUTER_API_KEY=xx
+PRODUCTION_BRANCH=origin/prod
+PREPROD_BRANCH=origin/preprod
 
 # Other
 APP_NAME=teams-node-catcher-local

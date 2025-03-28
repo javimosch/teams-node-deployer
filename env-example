@@ -4,6 +4,8 @@ CLIENT_SECRET=xx
 WEBHOOK_URL=https://08a0-81-185-175-161.ngrok-free.app/webhook
 BASE_URL=https://08a0-81-185-175-161.ngrok-free.app
 CRON_JOB_SCHEDULE=*/10 * * * * *
+PROCESS_CRON_JOB_SCHEDULE=*/10 * * * * *
+FETCH_CRON_JOB_SCHEDULE=*/10 * * * * *
 
 MESSAGE_PATTERN=agent:deploy
 
@@ -15,3 +17,8 @@ GITLAB_REPO_NAME=georedv3
 OPENROUTER_API_KEY=xx
 
 APP_NAME=teams-node-catcher-local
+
+BRANCH_NAMING_CONVENTIONS=GEO-XXX for GeoredV3 features,ADM-XXX for AdminV3 features, GDM-XXX for Citimission features
+
+PRODUCTION_BRANCH=origin/prod
+PREPROD_BRANCH=origin/preprod

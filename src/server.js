@@ -20,10 +20,10 @@ const cron = require('node-cron');
 let isCronRunning = false;
 let cronRunTimes=0
 
-cron.schedule(process.env.CRON_JOB_SCHEDULE || '*/10 * * * * *', runCronHandler);
+cron.schedule(process.env.FETCH_CRON_JOB_SCHEDULE||process.env.CRON_JOB_SCHEDULE || '*/10 * * * * *', runCronHandler);
 runCronHandler();
 
-cron.schedule(process.env.CRON_JOB_SCHEDULE || '*/10 * * * * *', processDeployments);
+cron.schedule(process.env.PROCESS_CRON_JOB_SCHEDULE||process.env.CRON_JOB_SCHEDULE || '*/10 * * * * *', processDeployments);
 processDeployments();
 
 cron.schedule('*/20 * * * * *', async () => {

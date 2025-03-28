@@ -34,9 +34,7 @@ async function detectBranchesWithAI(content) {
     const prompt = `
     Analyze this deployment request and identify all relevant branch names.
     Branch naming conventions:
-    - GEO-XXX for GeoredV3 features
-    - ADM-XXX for AdminV3 features  
-    - GDM-XXX for Citimission features
+    ${process.env.BRANCH_NAMING_CONVENTIONS.split(',').map(branch => ` - ${branch}`).join('\n')}
 
     Context clues:
     - "v3" typically indicates GEO-

@@ -5,6 +5,9 @@ const git = require('./git-utils');
 
 let processing = false;
 
+const PRODUCTION_BRANCH = process.env.PRODUCTION_BRANCH || 'origin/prod';
+const PREPROD_BRANCH = process.env.PREPROD_BRANCH || 'origin/preprod';
+
 async function processDeployments() {
     if (processing) return;
     processing = true;
@@ -67,8 +70,8 @@ async function deployTicket(deployment, repoPath) {
                 
                 console.log(`src/gitlab.js ${functionName} Processing branch`, { branch });
 
-                // 2.1 Checkout preprod and reset
-                await git.checkoutBranch(repoPath, 'preprod');
+                // 2.1 Checkout preprod-branch and reset
+                await git.checkoutBranch(repoPath, PREPROD_BRANCH);
                 await git.resetHard(repoPath);
 
                 // 2.2 Check if branch is already merged
@@ -152,8 +155,8 @@ async function deployTicket(deployment, repoPath) {
         }
 
         // 4. Calculate next tag
-        const prodTag = await git.getLatestTag(repoPath, 'origin/prod');
-        const preprodTag = await git.getLatestTag(repoPath, 'origin/preprod');
+        const prodTag = await git.getLatestTag(repoPath, PRODUCTION_BRANCH);
+        const preprodTag = await git.getLatestTag(repoPath, PREPROD_BRANCH);
         const nextTag = calculateNextTag(prodTag, preprodTag);
 
         console.log(`src/gitlab.js ${functionName} Tag calculation complete`, {
