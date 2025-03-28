@@ -5,6 +5,10 @@ WEBHOOK_URL=https://08a0-81-185-175-161.ngrok-free.app/webhook
 BASE_URL=https://08a0-81-185-175-161.ngrok-free.app
 CRON_JOB_SCHEDULE=*/10 * * * * *
 
+MESSAGE_PATTERN=agent:deploy
+
+CHAT_ID=48:notes
+
 GITLAB_ACCESS_TOKEN=xx
 GITLAB_REPO_NAME=georedv3
 

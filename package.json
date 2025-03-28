@@ -1,4 +1,9 @@
 {
+  "name":"teams-node-deployer",
+  "version":"1.0.0",
+  "description":"A deployment automation system that handles Git operations and version tagging for CI/CD pipelines. Manages branch merging conflicts and calculates semantic versioning tags automatically.",
+  "author":"Javier Arancibia",
+  "license":"MIT",
   "scripts": {
     "start": "node server.js",
     "dev": "npx -y nodemon src/server.js --watch .env --watch src -e js,env"

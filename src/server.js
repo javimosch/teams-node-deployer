@@ -41,7 +41,7 @@ async function runCronHandler() {
     console.log(`Running CRON...(${cronRunTimes})`);
     try {
         let accessToken = await getData('accessToken');
-        let chatId = `48:notes`
+        let chatId = process.env.CHAT_ID
         let messages = await getLatestMessages(accessToken, chatId)
         messages = messages.map(message => ({
             id: message.id,                                                                         
@@ -49,7 +49,7 @@ async function runCronHandler() {
             content: message.body.content,
             createdAt: message.createdDateTime
         }))
-        let matched = messages.filter(message => message.content.includes('agent:deploy'))
+        let matched = messages.filter(message => message.content.includes(process.env.MESSAGE_PATTERN))
 
         if (matched.length > 0) {
             console.log(`Deploy message found:`, {
