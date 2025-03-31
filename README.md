@@ -20,6 +20,7 @@ A deployment automation system that handles Git operations and version tagging f
 - You have a OpenRouter API key
 - Your gitlab repo has a preprod and a prod branch
 - Your ticket branches follow a convention i.g 'GEO-XXX', 'GDM-XXX', etc (see ai.js) (BRANCH_NAMING_CONVENTIONS)
+- Your ticket branches might have a "-preprod" suffix version (prioritized)
 
 ## Goal
 
