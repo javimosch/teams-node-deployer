@@ -141,6 +141,11 @@ async function pushBranchAndTag(repoPath, branch,tag){
     return executeGitCommand(repoPath, `push origin ${branch} ${tag}`);
 }
 
+async function branchExists(repoPath, branch){
+    const result = await executeGitCommand(repoPath, `branch --all`);
+    return result.success && result.output.includes(branch);
+}
+
 module.exports = {
     executeGitCommand,
     isBranchMerged,
@@ -149,5 +154,6 @@ module.exports = {
     pullBranch,
     getLatestTag,
     createTag,
-    pushBranchAndTag
+    pushBranchAndTag,
+    branchExists
 };

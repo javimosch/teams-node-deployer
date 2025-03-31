@@ -179,15 +179,16 @@
                     </div>
                 </div>
                 <div class="p-4 border-t flex justify-end gap-4">
-                    <button id="cancel-btn" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 ">
+                    <button id="mark-pending-btn" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 hidden">
+                        <i class="fas fa-undo mr-2"></i> Mark as pending
+                    </button>
+                    <button id="cancel-btn" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 hidden">
                         <i class="fas fa-ban mr-2"></i> Cancel
                     </button>
-                    <button id="approve-btn"
-                        class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 hidden">
+                    <button id="approve-btn" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 hidden">
                         <i class="fas fa-check mr-2"></i> Approve
                     </button>
-                    <button id="close-modal-btn"
-                        class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">
+                    <button id="close-modal-btn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">
                         Close
                     </button>
                     <span id="current-deployment-id" class="hidden"></span>
@@ -197,36 +198,6 @@
     </div>
 
     <script>
-        // Initialize deployments data
-        window.deployments = [
-            {
-                "id": "1743424565311",
-                "from": "Javier Arancibia",
-                "content": "<p>agent:deploy</p>\n<p>&nbsp;</p>\n<p>&nbsp;</p>\n<p>Salut.&nbsp;</p>\n<p>&nbsp;</p>\n<p>Javier&nbsp;Arancibia&nbsp;peux tu stp déployer ces tickets en pré prod ?&nbsp;</p>\n<ul>\n<li><a href=\"https://easyredmine.simpliciti.fr/issues/47822\" rel=\"noreferrer noopener\" title=\"https://easyredmine.simpliciti.fr/issues/47822\" target=\"_blank\">https://easyredmine.simpliciti.fr/issues/47822</a> (Fabien&nbsp;Raynaud&nbsp;y'a pas de l'api aussi ? )</li><li><a href=\"https://easyredmine.simpliciti.fr/issues/47856\" rel=\"noreferrer noopener\" title=\"https://easyredmine.simpliciti.fr/issues/47856\" target=\"_blank\">https://easyredmine.simpliciti.fr/issues/47856</a></li><li><a href=\"https://easyredmine.simpliciti.fr/issues/46790\" rel=\"noreferrer noopener\" title=\"https://easyredmine.simpliciti.fr/issues/46790\" target=\"_blank\">https://easyredmine.simpliciti.fr/issues/46790</a></li></ul>\n<p>&nbsp;</p>\n<p>Fabien&nbsp;RaynaudMême demande pour les deux tickets suivants:&nbsp;</p>\n<ul>\n<li>Tools =&gt; <a href=\"https://easyredmine.simpliciti.fr/issues/47765\" rel=\"noreferrer noopener\" title=\"https://easyredmine.simpliciti.fr/issues/47765\" target=\"_blank\">https://easyredmine.simpliciti.fr/issues/47765</a></li><li>Geored V2 =&gt; <a href=\"https://easyredmine.simpliciti.fr/issues/37468\" rel=\"noreferrer noopener\" title=\"https://easyredmine.simpliciti.fr/issues/37468\" target=\"_blank\">https://easyredmine.simpliciti.fr/issues/37468</a></li></ul>\n<p>Merci</p>",
-                "createdAt": "2025-03-31T12:36:05.311Z",
-                "updatedAt": "2025-03-31T12:36:05.311Z",
-                "status": "processed",
-                "approved": "true",
-                "blacklistedBranches": ["47822", "47765"],
-                "processingBranchErrors": [],
-                "processingLogs": [
-                    { "branch": "GEO-47822", "message": "Branch blacklisted" },
-                    { "branch": "GEO-47856", "message": "Successfully merged" },
-                    { "branch": "GEO-46790", "message": "Successfully merged" },
-                    { "branch": "GEO-47765", "message": "Branch blacklisted" },
-                    { "branch": "preprod", "tag": "3.0.4-RC6" }
-                ],
-                "repoPath": "/home/jarancibia/Documents/repos/teams-node-deployer/tmp/geored-v3",
-                "processedBranches": ["GEO-47856", "GEO-46790"],
-                "nextTag": "3.0.4-RC6",
-                "deployed": true
-            }
-        ];
-
-        //Deployments items will be injected from server on load
-        //__INJECT_DEPLOYMENTS_FROM_SERVER_HERE__
-
-
         // DOM elements
         const deploymentsContainer = document.getElementById('deployments-container');
         const detailsModal = document.getElementById('details-modal');
@@ -235,7 +206,52 @@
         const closeModalBtn = document.getElementById('close-modal-btn');
         const approveBtn = document.getElementById('approve-btn');
         const cancelBtn = document.getElementById('cancel-btn');
+        const markPendingBtn = document.getElementById('mark-pending-btn');
         const currentDeploymentId = document.getElementById('current-deployment-id');
+        const searchInput = document.getElementById('search-input');
+        const refreshBtn = document.querySelector('button:has(i.fa-sync-alt)');
+
+        // Initialize deployments data
+        window.deployments = [];
+        let filteredDeployments = [];
+
+        // Fetch deployments from server
+        async function fetchDeployments() {
+            console.log('index.html fetchDeployments')
+            try {
+                const response = await fetch('/api/deployments');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch deployments');
+                }
+                window.deployments = await response.json();
+                filteredDeployments = [...window.deployments];
+                renderDeployments();
+                updateMetrics();
+            } catch (err) {
+                console.log('index.html fetchDeployments error', {message: err.message, stack: err.stack})
+                alert('Failed to fetch deployments: ' + err.message);
+            }
+        }
+
+        // Initial fetch
+        fetchDeployments();
+
+        // Search functionality
+        searchInput.addEventListener('keyup', (e) => {
+            const searchTerm = e.target.value.toLowerCase();
+            filteredDeployments = window.deployments.filter(deployment => 
+                deployment.content.toLowerCase().includes(searchTerm)
+            );
+            renderDeployments();
+        });
+
+        // Refresh button
+        refreshBtn.addEventListener('click', () => {
+            refreshBtn.classList.add('animate-spin');
+            fetchDeployments().finally(() => {
+                refreshBtn.classList.remove('animate-spin');
+            });
+        });
 
         // Format date to readable string
         function formatDate(dateString) {
@@ -251,18 +267,27 @@
 
         // Get status badge
         function getStatusBadge(status) {
+            let badge;
             switch(status) {
                 case 'pending':
-                    return { color: 'bg-blue-100 text-blue-800', icon: 'fa-clock' };
+                    badge = { color: 'bg-blue-100 text-blue-800', icon: 'fa-clock' };
+                    break;
                 case 'processing':
-                    return { color: 'bg-yellow-100 text-yellow-800', icon: 'fa-spinner fa-spin' };
+                    badge = { color: 'bg-yellow-100 text-yellow-800', icon: 'fa-spinner fa-spin' };
+                    break;
                 case 'processed':
-                    return { color: 'bg-green-100 text-green-800', icon: 'fa-check-circle' };
+                    badge = { color: 'bg-green-100 text-green-800', icon: 'fa-check-circle' };
+                    break;
                 case 'canceled':
-                    return { color: 'bg-gray-100 text-gray-800', icon: 'fa-ban' };
+                    badge = { color: 'bg-gray-100 text-gray-800', icon: 'fa-ban' };
+                    break;
                 default:
-                    return { color: 'bg-gray-100 text-gray-600', icon: 'fa-question-circle' };
+                    badge = { color: 'bg-gray-100 text-gray-600', icon: 'fa-question-circle' };
             }
+            return `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${badge.color}">
+                <i class="fas ${badge.icon} mr-1"></i>
+                ${status.charAt(0).toUpperCase() + status.slice(1)}
+            </span>`;
         }
 
         // Generate approval badge
@@ -284,24 +309,20 @@
         }
 
         // Render deployment items
-        async function renderDeployments() {
+        function renderDeployments() {
+            const container = document.getElementById('deployments-container');
+            container.innerHTML = '';
 
-            const response = await fetch('/api/deployments');
-            window.deployments = await response.json();
-
-            deploymentsContainer.innerHTML = '';
-
-            if (window.deployments.length === 0) {
-                deploymentsContainer.innerHTML = `
-                    <div class="col-span-12 p-8 text-center text-gray-500">
-                        <i class="fas fa-inbox text-4xl mb-2"></i>
-                        <p class="text-lg">No deployments found</p>
+            if (filteredDeployments.length === 0) {
+                container.innerHTML = `
+                    <div class="p-4 text-center text-gray-500">
+                        No deployments found
                     </div>
                 `;
                 return;
             }
 
-            window.deployments.forEach(deployment => {
+            filteredDeployments.forEach(deployment => {
                 const statusBadge = getStatusBadge(deployment.status);
                 const updatedAt = deployment.updatedAt || deployment.createdAt;
                 const contentPreview = stripHtml(deployment.content).substring(0, 100) + '...';
@@ -322,10 +343,7 @@
                         </div>` : ''}
                     </div>
                     <div class="col-span-4 md:col-span-2 flex items-center">
-                        <span class="px-2 py-1 rounded-full ${statusBadge.color} text-xs flex items-center gap-1">
-                            <i class="fas ${statusBadge.icon}"></i>
-                            ${deployment.status.charAt(0).toUpperCase() + deployment.status.slice(1)}
-                        </span>
+                        ${statusBadge}
                         ${hasErrors ? '<i class="fas fa-exclamation-circle text-red-500 ml-2"></i>' : ''}
                     </div>
                     <div class="col-span-2 md:col-span-2 flex items-center">
@@ -340,7 +358,7 @@
                         </button>
                     </div>
                 `;
-                deploymentsContainer.appendChild(deploymentItem);
+                container.appendChild(deploymentItem);
             });
 
             // Add event listeners to view buttons
@@ -385,134 +403,83 @@
             }
 
             // Show/hide cancel button based on status
-            if (!deployment.deployed) {
+            if (!deployment.deployed && !isCanceled) {
                 cancelBtn.classList.remove('hidden');
             } else {
                 cancelBtn.classList.add('hidden');
             }
 
+            // Show/hide mark as pending button based on status
+            if (deployment.status === 'processed' && deployment.approved !== "true") {
+                markPendingBtn.classList.remove('hidden');
+            } else {
+                markPendingBtn.classList.add('hidden');
+            }
+
             // Build modal content
             let content = `
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                    <div class="bg-gray-50 p-4 rounded-lg">
-                        <h4 class="font-medium text-gray-700 mb-2"><i class="fas fa-info-circle mr-2 text-indigo-500"></i>Basic Info</h4>
-                        <div class="space-y-2">
-                            <div>
-                                <span class="text-sm text-gray-500">Requested by:</span>
-                                <p class="font-medium">${deployment.from}</p>
-                            </div>
-                            <div>
-                                <span class="text-sm text-gray-500">Status:</span>
-                                <p class="font-medium">
-                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getStatusBadge(deployment.status).color}">
-                                        <i class="fas ${getStatusBadge(deployment.status).icon} mr-1"></i>
-                                        ${deployment.status.charAt(0).toUpperCase() + deployment.status.slice(1)}
+                <div class="space-y-6">
+                    <div>
+                        <h4 class="text-sm font-medium text-gray-500">From</h4>
+                        <p class="mt-1 text-sm text-gray-900">${deployment.from}</p>
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-medium text-gray-500">Content</h4>
+                        <div class="mt-1 text-sm text-gray-900">${deployment.content}</div>
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-medium text-gray-500">Status</h4>
+                        <div class="mt-1">${getStatusBadge(deployment.status)}</div>
+                    </div>
+                    ${deployment.processedBranches ? `
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-500">Processed Branches</h4>
+                            <div class="mt-1 branch-list">
+                                ${deployment.processedBranches.map(branch => `
+                                    <span class="branch-item">
+                                        <i class="fas fa-code-branch text-gray-400"></i>
+                                        <span class="text-sm text-gray-900">${branch}</span>
                                     </span>
-                                </p>
-                            </div>
-                            <div>
-                                <span class="text-sm text-gray-500">Human approval:</span>
-                                <p class="font-medium">${getApprovalBadge(deployment.approved)}</p>
-                            </div>
-                            <div>
-                                <span class="text-sm text-gray-500">Last updated:</span>
-                                <p class="font-medium">${formatDate(deployment.updatedAt || deployment.createdAt)}</p>
+                                `).join('')}
                             </div>
                         </div>
-                    </div>
-                    
-                    <div class="bg-gray-50 p-4 rounded-lg">
-                        <h4 class="font-medium text-gray-700 mb-2"><i class="fas fa-code-branch mr-2 text-indigo-500"></i>Branches Info</h4>
-                        <div class="space-y-2">
-                            <div>
-                                <span class="text-sm text-gray-500">Processed branches:</span>
-                                <div class="branch-list mt-1">
-                                    ${deployment.processedBranches || [].map(branch => `
-                                        <span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded flex items-center gap-1">
-                                            <i class="fas fa-check-circle"></i> ${branch}
-                                        </span>
-                                    `).join('')}
-                                </div>
-                            </div>
-                            <div>
-                                <span class="text-sm text-gray-500">Blacklisted branches:</span>
-                                <div class="branch-list mt-1">
-                                    ${deployment.blacklistedBranches || [].map(branch => `
-                                        <span class="bg-red-100 text-red-800 text-xs px-2 py-1 rounded flex items-center gap-1">
-                                            <i class="fas fa-ban"></i> ${branch}
-                                        </span>
-                                    `).join('')}
-                                </div>
-                            </div>
-                            ${deployment.nextTag ? `
-                            <div>
-                                <span class="text-sm text-gray-500">Next tag:</span>
-                                <p class="font-medium text-indigo-600">${deployment.nextTag}</p>
-                            </div>
-                            ` : ''}
-                        </div>
-                    </div>
-                    
-                    <div class="bg-gray-50 p-4 rounded-lg">
-                        <h4 class="font-medium text-gray-700 mb-2"><i class="fas fa-server mr-2 text-indigo-500"></i>System Info</h4>
-                        <div class="space-y-2">
-                            <div>
-                                <span class="text-sm text-gray-500">Repo path:</span>
-                                <p class="font-mono text-xs bg-gray-200 p-1 rounded">${deployment.repoPath}</p>
-                            </div>
-                            <div>
-                                <span class="text-sm text-gray-500">Deployed:</span>
-                                <p class="font-medium">
-                                    ${deployment.deployed ?
-                    '<span class="text-green-600"><i class="fas fa-check-circle"></i> Yes</span>' :
-                    '<span class="text-yellow-600"><i class="fas fa-clock"></i> Pending</span>'}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div class="bg-gray-50 p-4 rounded-lg">
-                        <h4 class="font-medium text-gray-700 mb-2"><i class="fas fa-envelope mr-2 text-indigo-500"></i>Original Request</h4>
-                        <div class="prose max-w-none bg-white p-4 rounded border border-gray-200">
-                            ${deployment.content}
-                        </div>
-                    </div>
-                    
-                    <div class="bg-gray-50 p-4 rounded-lg">
-                        <h4 class="font-medium text-gray-700 mb-2">
-                            <i class="fas fa-history mr-2 text-indigo-500"></i>Processing Logs
-                            ${hasErrors ? '<span class="ml-2 text-xs px-2 py-0.5 bg-red-100 text-red-800 rounded">Has Errors</span>' : ''}
-                        </h4>
-                        ${hasErrors ? `
-                            <div class="mb-4 bg-red-50 border border-red-200 rounded p-3">
-                                <h5 class="text-sm font-medium text-red-800 mb-2">Processing Errors:</h5>
+                    ` : ''}
+                    ${deployment.processingBranchErrors && deployment.processingBranchErrors.length > 0 ? `
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-500 text-red-600">Errors</h4>
+                            <div class="mt-1 space-y-2">
                                 ${deployment.processingBranchErrors.map(error => `
-                                    <div class="mb-2 last:mb-0">
-                                        <div class="text-sm font-medium text-red-800">Branch: ${error.branch}</div>
-                                        <div class="text-sm text-red-600 mt-1">
-                                            <div class="font-mono bg-red-100 p-2 rounded text-xs overflow-x-auto">
-                                                <div>Message: ${error.message}</div>
-                                                ${error.stack ? `<div class="mt-1">Stack: ${error.stack}</div>` : ''}
-                                            </div>
-                                        </div>
+                                    <div class="text-sm text-red-600 bg-red-50 p-3 rounded-lg">
+                                        <p class="font-medium">Branch: ${error.branch}</p>
+                                        <p class="mt-1">${error.message}</p>
+                                        ${error.stack ? `<pre class="mt-2 text-xs overflow-x-auto">${error.stack}</pre>` : ''}
                                     </div>
                                 `).join('')}
                             </div>
-                        ` : ''}
-                        <div class="space-y-4 mt-2 pl-4">
-                            ${deployment.processingLogs.map(log => `
-                                <div class="log-entry">
-                                    <div class="text-sm font-medium text-gray-800">
-                                        ${log.branch}
-                                        ${log.tag ? `<span class="ml-2 text-xs px-1 py-0.5 bg-indigo-100 text-indigo-800 rounded">Tag: ${log.tag}</span>` : ''}
-                                    </div>
-                                    ${log.message ? `<div class="text-sm text-gray-600 mt-1">${log.message}</div>` : ''}
-                                </div>
-                            `).join('')}
                         </div>
+                    ` : ''}
+                    ${deployment.processingLogs && deployment.processingLogs.length > 0 ? `
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-500">Processing Logs</h4>
+                            <div class="mt-1 space-y-2">
+                                ${deployment.processingLogs.map(log => `
+                                    <div class="log-entry text-sm text-gray-600 py-1">
+                                        <p><span class="font-medium">${log.branch}:</span> ${log.message}</p>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+                    <div>
+                        <h4 class="text-sm font-medium text-gray-500">Created</h4>
+                        <p class="mt-1 text-sm text-gray-900">${formatDate(deployment.createdAt)}</p>
                     </div>
+                    ${deployment.updatedAt ? `
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-500">Last Updated</h4>
+                            <p class="mt-1 text-sm text-gray-900">${formatDate(deployment.updatedAt)}</p>
+                        </div>
+                    ` : ''}
                 </div>
             `;
 
@@ -534,7 +501,7 @@
                         status: 'processing'
                     })
                 })
-                    .then(response => response.json())
+                    //.then(response => response.json())
                     .then(() => {
                         deployment.approved = "true";
                         if (deployment.status === 'pending') {
@@ -575,6 +542,46 @@
             }
         }
 
+        // Mark deployment as pending
+        async function markAsPending(deployment) {
+            console.log('index.html markAsPending', {id: deployment.id})
+            if (!confirm('Are you sure you want to mark this deployment as pending?')) {
+                return;
+            }
+            try {
+                const response = await fetch('/api/deployments', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        id: deployment.id,
+                        status: 'pending'
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.text();
+                    throw new Error(error);
+                }
+
+                // Update local data
+                const deploymentIndex = window.deployments.findIndex(d => d.id === deployment.id);
+                if (deploymentIndex !== -1) {
+                    window.deployments[deploymentIndex].status = 'pending';
+                    window.deployments[deploymentIndex].updatedAt = new Date().toISOString();
+                }
+
+                // Refresh UI
+                renderDeployments();
+                updateMetrics();
+                detailsModal.classList.add('hidden');
+            } catch (err) {
+                console.log('index.html markAsPending error', {message: err.message, stack: err.stack})
+                alert('Failed to mark as pending: ' + err.message);
+            }
+        }
+
         // Update metrics function
         function updateMetrics() {
             const total = window.deployments.length;
@@ -593,18 +600,14 @@
             detailsModal.classList.add('hidden');
         });
 
-        document.addEventListener('click', (e) => {
-            if (e.target && e.target.id === 'cancel-btn') {
-                const id = currentDeploymentId.textContent;
-                const deployment = window.deployments.find(d => d.id === id);
-                if (deployment) {
-                    cancelDeployment(deployment);
-                }
+        window.addEventListener('click', (e) => {
+            if (e.target === detailsModal) {
+                closeModal.click();
             }
         });
 
         closeModalBtn.addEventListener('click', () => {
-            detailsModal.classList.add('hidden');
+            closeModal.click();
         });
 
         approveBtn.addEventListener('click', () => {
@@ -615,15 +618,20 @@
             }
         });
 
+        markPendingBtn.addEventListener('click', () => {
+            const id = currentDeploymentId.textContent;
+            const deployment = window.deployments.find(d => d.id === id);
+            if (deployment) {
+                markAsPending(deployment);
+            }
+        });
+
         // Close modal when clicking outside
         detailsModal.addEventListener('click', (e) => {
             if (e.target === detailsModal) {
                 detailsModal.classList.add('hidden');
             }
         });
-
-        // Initial render
-        renderDeployments();
     </script>
 </body>
 

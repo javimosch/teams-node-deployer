@@ -14,8 +14,9 @@ async function processDeployments() {
     try {
         let deployments = await getData('deployments');
 
-        deployments = deployments.filter(deployment => deployment.status !== 'processed' || (deployment.approved === 'true' && deployment.status === 'processed' && !!deployment.nextTag && deployment.deployed !== true));
-
+        deployments = deployments
+        .filter(dpl=>dpl.status !== 'canceled')
+        .filter(deployment => deployment.status !== 'processed' || (deployment.approved === 'true' && deployment.status === 'processed' && !!deployment.nextTag && deployment.deployed !== true))
 
         if (deployments.length > 0) {
             for (const deployment of deployments) {
@@ -73,11 +74,14 @@ async function deployTicket(deployment, repoPath) {
 
 
         // 2. Process each branch
-        for (const branch of branches) {
+        for (let branch of branches) {
             try {
+
+                await git.executeGitCommand(repoPath, `fetch`); //sync
+
                 deployment.processingLogs = deployment.processingLogs || [];
 
-                if (deployment.blacklistedBranches.some(blacklisted => branch.includes(blacklisted))) {
+                if (deployment.blacklistedBranches||[].some(blacklisted => branch.includes(blacklisted))) {
                     console.log(`src/gitlab.js ${functionName} Skipping blacklisted branch`, { branch });
                     deployment.processingLogs.push({
                         branch,
@@ -101,7 +105,21 @@ async function deployTicket(deployment, repoPath) {
                     continue;
                 }
 
-                
+                const branchExistsPreprod = await git.branchExists(repoPath, `${branch}-preprod`);
+                if (branchExistsPreprod) {
+                    branch = `${branch}-preprod`;
+                }
+                console.log(`src/gitlab.js ${functionName} Using branch`, { branch, branchExistsPreprod });
+
+                const branchExists = await git.branchExists(repoPath, branch);
+                if (!branchExists) {
+                    console.log(`src/gitlab.js ${functionName} Branch does not exist`, { branch });
+                    deployment.processingLogs.push({
+                        branch,
+                        message: `Branch does not exist`
+                    });
+                    continue;
+                }
                 
 
                 // 2.3 Pull branch with conflict handling
@@ -172,7 +190,7 @@ async function deployTicket(deployment, repoPath) {
         }
 
         //if approved and nextTag, try pushing preprod and tag
-        if (deployment.approved === 'true' && deployment.nextTag) {
+        if (deployment.approved === true && deployment.nextTag) {
 
             await git.createTag(repoPath, deployment.nextTag);
             
