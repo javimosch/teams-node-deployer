@@ -92,13 +92,19 @@ async function pullBranch(repoPath, branchName) {
     return result;
 }
 
-async function resetHard(repoPath) {
+/**
+ * Resets the local repository to the current state of the remote preprod branch.
+ * This is used to ensure that the local repository is up to date and to avoid merge conflicts.
+ * @param {string} repoPath - The path to the local repository
+ * @returns {Promise<{success: boolean, output: string, error: string}>}
+ */
+async function resetHard(repoPath, branchName) {
     const fileName = 'git-utils.js';
     const functionName = 'resetHard';
     
-    console.log(`${fileName} ${functionName} Attempting to reset hard`, { repoPath });
+    console.log(`${fileName} ${functionName} Attempting to reset hard`, { repoPath, branchName });
     
-    return executeGitCommand(repoPath, `reset --hard origin/preprod`);
+    return executeGitCommand(repoPath, `reset --hard ${branchName}`);
 }
 
 async function getLatestTag(repoPath, ref) {
@@ -111,11 +117,37 @@ async function getLatestTag(repoPath, ref) {
     return result.success ? result.output.trim() : null;
 }
 
+/**
+ * Creates a new tag in the local repository.
+ * @param {string} repoPath - The path to the local repository
+ * @param {string} tag - The tag to create
+ * @returns {Promise<{success: boolean, output: string, error: string}>}
+ */
+async function createTag(repoPath,tag){
+    const fileName = 'git-utils.js';
+    const functionName = 'createTag';
+    
+    console.log(`${fileName} ${functionName} Attempting to create tag`, { tag });
+    
+    return executeGitCommand(repoPath, `tag ${tag}`);
+}
+
+async function pushBranchAndTag(repoPath, branch,tag){
+    const fileName = 'git-utils.js';
+    const functionName = 'pushBranchAndTag';
+    
+    console.log(`${fileName} ${functionName} Attempting to push branch and tag`, { branch, tag });
+    
+    return executeGitCommand(repoPath, `push origin ${branch} ${tag}`);
+}
+
 module.exports = {
     executeGitCommand,
     isBranchMerged,
     checkoutBranch,
     resetHard,
     pullBranch,
-    getLatestTag
+    getLatestTag,
+    createTag,
+    pushBranchAndTag
 };

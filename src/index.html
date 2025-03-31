@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deployment Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .log-entry {
+            position: relative;
+            padding-left: 1.5rem;
+            border-left: 2px solid #e2e8f0;
+        }
+        .log-entry:before {
+            content: '';
+            position: absolute;
+            left: -7px;
+            top: 8px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #4f46e5;
+        }
+        .log-entry:last-child {
+            border-left-color: transparent;
+        }
+        .branch-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        .branch-item {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+        .content-preview {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;  
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #c7d2fe;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a5b4fc;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-800 flex items-center gap-2">
+                    <i class="fas fa-rocket"></i>
+                    Deployment Manager
+                </h1>
+                <p class="text-gray-600">Manage and track deployment requests</p>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                        <i class="fas fa-search text-gray-400"></i>
+                    </div>
+                    <input type="text" id="search-input" class="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 p-2.5" placeholder="Search deployments...">
+                </div>
+                <button class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition">
+                    <i class="fas fa-sync-alt"></i>
+                    Refresh
+                </button>
+            </div>
+        </div>
+
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div class="bg-white rounded-lg shadow p-4 border-l-4 border-indigo-500">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-500">Total Deployments</p>
+                        <p class="text-2xl font-semibold text-gray-800">1</p>
+                    </div>
+                    <div class="bg-indigo-100 p-3 rounded-full">
+                        <i class="fas fa-list text-indigo-600"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-500">Processed</p>
+                        <p class="text-2xl font-semibold text-gray-800">1</p>
+                    </div>
+                    <div class="bg-green-100 p-3 rounded-full">
+                        <i class="fas fa-check-circle text-green-600"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4 border-l-4 border-blue-500">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-500">Pending</p>
+                        <p class="text-2xl font-semibold text-gray-800">0</p>
+                    </div>
+                    <div class="bg-blue-100 p-3 rounded-full">
+                        <i class="fas fa-clock text-blue-600"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4 border-l-4 border-red-500">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-500">Errors</p>
+                        <p class="text-2xl font-semibold text-gray-800">2</p>
+                    </div>
+                    <div class="bg-red-100 p-3 rounded-full">
+                        <i class="fas fa-exclamation-triangle text-red-600"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Deployments List -->
+        <div class="bg-white rounded-lg shadow overflow-hidden">
+            <!-- Table Header -->
+            <div class="grid grid-cols-12 bg-gray-100 p-4 border-b text-sm font-medium text-gray-600">
+                <div class="col-span-4 md:col-span-5">Request Details</div>
+                <div class="col-span-4 md:col-span-2">Status</div>
+                <div class="col-span-2 md:col-span-2">Approval</div>
+                <div class="col-span-2 md:col-span-2">Updated</div>
+                <div class="col-span-0 md:col-span-1"></div>
+            </div>
+
+            <!-- Deployment Items -->
+            <div id="deployments-container">
+                <!-- Deployment items will be dynamically inserted here -->
+            </div>
+        </div>
+
+        <!-- Deployment Details Modal -->
+        <div id="details-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 hidden">
+            <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col">
+                <div class="flex justify-between items-center p-4 border-b">
+                    <h3 class="text-xl font-semibold text-gray-800">Deployment Details</h3>
+                    <button id="close-modal" class="text-gray-400 hover:text-gray-500">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="p-6 overflow-y-auto flex-grow">
+                    <div id="modal-content">
+                        <!-- Modal content will be dynamically inserted here -->
+                    </div>
+                </div>
+                <div class="p-4 border-t flex justify-end gap-4">
+                    <button id="approve-btn" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 hidden">
+                        <i class="fas fa-check mr-2"></i> Approve
+                    </button>
+                    <button id="close-modal-btn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">
+                        Close
+                    </button>
+                    <span id="current-deployment-id" class="hidden"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize deployments data
+        window.deployments = [
+            {
+                "id": "1743424565311",
+                "from": "Javier Arancibia",
+                "content": "<p>agent:deploy</p>\n<p>&nbsp;</p>\n<p>&nbsp;</p>\n<p>Salut.&nbsp;</p>\n<p>&nbsp;</p>\n<p>Javier&nbsp;Arancibia&nbsp;peux tu stp déployer ces tickets en pré prod ?&nbsp;</p>\n<ul>\n<li><a href=\"https://easyredmine.simpliciti.fr/issues/47822\" rel=\"noreferrer noopener\" title=\"https://easyredmine.simpliciti.fr/issues/47822\" target=\"_blank\">https://easyredmine.simpliciti.fr/issues/47822</a> (Fabien&nbsp;Raynaud&nbsp;y'a pas de l'api aussi ? )</li><li><a href=\"https://easyredmine.simpliciti.fr/issues/47856\" rel=\"noreferrer noopener\" title=\"https://easyredmine.simpliciti.fr/issues/47856\" target=\"_blank\">https://easyredmine.simpliciti.fr/issues/47856</a></li><li><a href=\"https://easyredmine.simpliciti.fr/issues/46790\" rel=\"noreferrer noopener\" title=\"https://easyredmine.simpliciti.fr/issues/46790\" target=\"_blank\">https://easyredmine.simpliciti.fr/issues/46790</a></li></ul>\n<p>&nbsp;</p>\n<p>Fabien&nbsp;RaynaudMême demande pour les deux tickets suivants:&nbsp;</p>\n<ul>\n<li>Tools =&gt; <a href=\"https://easyredmine.simpliciti.fr/issues/47765\" rel=\"noreferrer noopener\" title=\"https://easyredmine.simpliciti.fr/issues/47765\" target=\"_blank\">https://easyredmine.simpliciti.fr/issues/47765</a></li><li>Geored V2 =&gt; <a href=\"https://easyredmine.simpliciti.fr/issues/37468\" rel=\"noreferrer noopener\" title=\"https://easyredmine.simpliciti.fr/issues/37468\" target=\"_blank\">https://easyredmine.simpliciti.fr/issues/37468</a></li></ul>\n<p>Merci</p>",
+                "createdAt": "2025-03-31T12:36:05.311Z",
+                "updatedAt": "2025-03-31T12:36:05.311Z",
+                "status": "processed",
+                "approved": "true",
+                "blacklistedBranches": ["47822", "47765"],
+                "processingBranchErrors": [],
+                "processingLogs": [
+                    { "branch": "GEO-47822", "message": "Branch blacklisted" },
+                    { "branch": "GEO-47856", "message": "Successfully merged" },
+                    { "branch": "GEO-46790", "message": "Successfully merged" },
+                    { "branch": "GEO-47765", "message": "Branch blacklisted" },
+                    { "branch": "preprod", "tag": "3.0.4-RC6" }
+                ],
+                "repoPath": "/home/jarancibia/Documents/repos/teams-node-deployer/tmp/geored-v3",
+                "processedBranches": ["GEO-47856", "GEO-46790"],
+                "nextTag": "3.0.4-RC6",
+                "deployed": true
+            }
+        ];
+
+        //Deployments items will be injected from server on load
+        //__INJECT_DEPLOYMENTS_FROM_SERVER_HERE__
+        
+
+        // DOM elements
+        const deploymentsContainer = document.getElementById('deployments-container');
+        const detailsModal = document.getElementById('details-modal');
+        const modalContent = document.getElementById('modal-content');
+        const closeModal = document.getElementById('close-modal');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+        const approveBtn = document.getElementById('approve-btn');
+        const currentDeploymentId = document.getElementById('current-deployment-id');
+
+        // Format date to readable string
+        function formatDate(dateString) {
+            const options = { 
+                year: 'numeric', 
+                month: 'short', 
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            };
+            return new Date(dateString).toLocaleDateString('en-US', options);
+        }
+
+        // Generate status badge
+        function getStatusBadge(status) {
+            const statusMap = {
+                'processed': { color: 'bg-green-100 text-green-800', icon: 'fa-check-circle' },
+                'processing': { color: 'bg-blue-100 text-blue-800', icon: 'fa-sync-alt fa-spin' },
+                'failed': { color: 'bg-red-100 text-red-800', icon: 'fa-exclamation-circle' },
+                'pending': { color: 'bg-yellow-100 text-yellow-800', icon: 'fa-clock' }
+            };
+            return statusMap[status] || { color: 'bg-gray-100 text-gray-800', icon: 'fa-question-circle' };
+        }
+
+        // Generate approval badge
+        function getApprovalBadge(approved) {
+            if (approved === "true") {
+                return '<span class="px-2 py-1 rounded-full bg-green-100 text-green-800 text-xs flex items-center gap-1"><i class="fas fa-check-circle"></i> Approved</span>';
+            } else if (approved === "false") {
+                return '<span class="px-2 py-1 rounded-full bg-red-100 text-red-800 text-xs flex items-center gap-1"><i class="fas fa-times-circle"></i> Rejected</span>';
+            } else {
+                return '<span class="px-2 py-1 rounded-full bg-yellow-100 text-yellow-800 text-xs flex items-center gap-1"><i class="fas fa-clock"></i> Pending</span>';
+            }
+        }
+
+        // Strip HTML tags for preview
+        function stripHtml(html) {
+            const tmp = document.createElement("div");
+            tmp.innerHTML = html;
+            return tmp.textContent || tmp.innerText || "";
+        }
+
+        // Render deployment items
+        function renderDeployments() {
+            deploymentsContainer.innerHTML = '';
+            
+            if (window.deployments.length === 0) {
+                deploymentsContainer.innerHTML = `
+                    <div class="col-span-12 p-8 text-center text-gray-500">
+                        <i class="fas fa-inbox text-4xl mb-2"></i>
+                        <p class="text-lg">No deployments found</p>
+                    </div>
+                `;
+                return;
+            }
+
+            window.deployments.forEach(deployment => {
+                const statusBadge = getStatusBadge(deployment.status);
+                const updatedAt = deployment.updatedAt || deployment.createdAt;
+                const contentPreview = stripHtml(deployment.content).substring(0, 100) + '...';
+                const hasErrors = deployment.processingBranchErrors && deployment.processingBranchErrors.length > 0;
+                
+                const deploymentItem = document.createElement('div');
+                deploymentItem.className = 'grid grid-cols-12 p-4 border-b hover:bg-gray-50 cursor-pointer transition';
+                deploymentItem.dataset.id = deployment.id;
+                deploymentItem.innerHTML = `
+                    <div class="col-span-4 md:col-span-5">
+                        <div class="font-medium text-gray-800 flex items-center gap-2">
+                            <i class="fas fa-user-circle text-indigo-500"></i>
+                            ${deployment.from}
+                        </div>
+                        <div class="text-gray-500 text-sm mt-1 content-preview">${contentPreview}</div>
+                        ${deployment.nextTag ? `<div class="mt-1">
+                            <span class="text-xs px-2 py-1 bg-indigo-100 text-indigo-800 rounded">Tag: ${deployment.nextTag}</span>
+                        </div>` : ''}
+                    </div>
+                    <div class="col-span-4 md:col-span-2 flex items-center">
+                        <span class="px-2 py-1 rounded-full ${statusBadge.color} text-xs flex items-center gap-1">
+                            <i class="fas ${statusBadge.icon}"></i>
+                            ${deployment.status.charAt(0).toUpperCase() + deployment.status.slice(1)}
+                        </span>
+                        ${hasErrors ? '<i class="fas fa-exclamation-circle text-red-500 ml-2"></i>' : ''}
+                    </div>
+                    <div class="col-span-2 md:col-span-2 flex items-center">
+                        ${getApprovalBadge(deployment.approved)}
+                    </div>
+                    <div class="col-span-2 md:col-span-2 flex items-center text-sm text-gray-500">
+                        ${formatDate(updatedAt)}
+                    </div>
+                    <div class="col-span-0 md:col-span-1 flex items-center justify-end">
+                        <button class="text-indigo-600 hover:text-indigo-800 transition view-details" data-id="${deployment.id}">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                `;
+                deploymentsContainer.appendChild(deploymentItem);
+            });
+
+            // Add event listeners to view buttons
+            document.querySelectorAll('.view-details').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const id = button.dataset.id;
+                    showDeploymentDetails(id);
+                });
+            });
+
+            // Add event listeners to deployment items
+            document.querySelectorAll('[data-id]').forEach(item => {
+                item.addEventListener('click', () => {
+                    const id = item.dataset.id;
+                    showDeploymentDetails(id);
+                });
+            });
+        }
+
+        // Show deployment details modal
+        function showDeploymentDetails(id) {
+            const deployment = window.deployments.find(d => d.id === id);
+            if (!deployment) return;
+
+            currentDeploymentId.textContent = id;
+            
+            // Show/hide approve button based on approval status
+            if (deployment.approved !== "true") {
+                approveBtn.classList.remove('hidden');
+            } else {
+                approveBtn.classList.add('hidden');
+            }
+
+            // Build modal content
+            let content = `
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <h4 class="font-medium text-gray-700 mb-2"><i class="fas fa-info-circle mr-2 text-indigo-500"></i>Basic Info</h4>
+                        <div class="space-y-2">
+                            <div>
+                                <span class="text-sm text-gray-500">Requested by:</span>
+                                <p class="font-medium">${deployment.from}</p>
+                            </div>
+                            <div>
+                                <span class="text-sm text-gray-500">Status:</span>
+                                <p class="font-medium">
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getStatusBadge(deployment.status).color}">
+                                        <i class="fas ${getStatusBadge(deployment.status).icon} mr-1"></i>
+                                        ${deployment.status.charAt(0).toUpperCase() + deployment.status.slice(1)}
+                                    </span>
+                                </p>
+                            </div>
+                            <div>
+                                <span class="text-sm text-gray-500">Approval:</span>
+                                <p class="font-medium">${getApprovalBadge(deployment.approved)}</p>
+                            </div>
+                            <div>
+                                <span class="text-sm text-gray-500">Last updated:</span>
+                                <p class="font-medium">${formatDate(deployment.updatedAt || deployment.createdAt)}</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <h4 class="font-medium text-gray-700 mb-2"><i class="fas fa-code-branch mr-2 text-indigo-500"></i>Branches Info</h4>
+                        <div class="space-y-2">
+                            <div>
+                                <span class="text-sm text-gray-500">Processed branches:</span>
+                                <div class="branch-list mt-1">
+                                    ${deployment.processedBranches||[].map(branch => `
+                                        <span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded flex items-center gap-1">
+                                            <i class="fas fa-check-circle"></i> ${branch}
+                                        </span>
+                                    `).join('')}
+                                </div>
+                            </div>
+                            <div>
+                                <span class="text-sm text-gray-500">Blacklisted branches:</span>
+                                <div class="branch-list mt-1">
+                                    ${deployment.blacklistedBranches||[].map(branch => `
+                                        <span class="bg-red-100 text-red-800 text-xs px-2 py-1 rounded flex items-center gap-1">
+                                            <i class="fas fa-ban"></i> ${branch}
+                                        </span>
+                                    `).join('')}
+                                </div>
+                            </div>
+                            ${deployment.nextTag ? `
+                            <div>
+                                <span class="text-sm text-gray-500">Next tag:</span>
+                                <p class="font-medium text-indigo-600">${deployment.nextTag}</p>
+                            </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <h4 class="font-medium text-gray-700 mb-2"><i class="fas fa-server mr-2 text-indigo-500"></i>System Info</h4>
+                        <div class="space-y-2">
+                            <div>
+                                <span class="text-sm text-gray-500">Repo path:</span>
+                                <p class="font-mono text-xs bg-gray-200 p-1 rounded">${deployment.repoPath}</p>
+                            </div>
+                            <div>
+                                <span class="text-sm text-gray-500">Deployed:</span>
+                                <p class="font-medium">
+                                    ${deployment.deployed ? 
+                                        '<span class="text-green-600"><i class="fas fa-check-circle"></i> Yes</span>' : 
+                                        '<span class="text-yellow-600"><i class="fas fa-clock"></i> Pending</span>'}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <h4 class="font-medium text-gray-700 mb-2"><i class="fas fa-envelope mr-2 text-indigo-500"></i>Original Request</h4>
+                        <div class="prose max-w-none bg-white p-4 rounded border border-gray-200">
+                            ${deployment.content}
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <h4 class="font-medium text-gray-700 mb-2"><i class="fas fa-history mr-2 text-indigo-500"></i>Processing Logs</h4>
+                        <div class="space-y-4 mt-2 pl-4">
+                            ${deployment.processingLogs.map(log => `
+                                <div class="log-entry">
+                                    <div class="text-sm font-medium text-gray-800">
+                                        ${log.branch}
+                                        ${log.tag ? `<span class="ml-2 text-xs px-1 py-0.5 bg-indigo-100 text-indigo-800 rounded">Tag: ${log.tag}</span>` : ''}
+                                    </div>
+                                    ${log.message ? `<div class="text-sm text-gray-600 mt-1">${log.message}</div>` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            modalContent.innerHTML = content;
+            detailsModal.classList.remove('hidden');
+        }
+
+        // Mark deployment as approved
+        function markApproved(deployment) {
+            if (confirm(`Are you sure you want to approve this deployment request from ${deployment.from}?`)) {
+                deployment.approved = "true";
+                if (deployment.status === 'pending') {
+                    deployment.status = 'processing';
+                    deployment.updatedAt = new Date().toISOString();
+                }
+                renderDeployments();
+                detailsModal.classList.add('hidden');
+            }
+        }
+
+        // Event listeners for modal
+        closeModal.addEventListener('click', () => {
+            detailsModal.classList.add('hidden');
+        });
+
+        closeModalBtn.addEventListener('click', () => {
+            detailsModal.classList.add('hidden');
+        });
+
+        approveBtn.addEventListener('click', () => {
+            const id = currentDeploymentId.textContent;
+            const deployment = window.deployments.find(d => d.id === id);
+            if (deployment) {
+                markApproved(deployment);
+            }
+        });
+
+        // Close modal when clicking outside
+        detailsModal.addEventListener('click', (e) => {
+            if (e.target === detailsModal) {
+                detailsModal.classList.add('hidden');
+            }
+        });
+
+        // Initial render
+        renderDeployments();
+    </script>
+</body>
+</html>

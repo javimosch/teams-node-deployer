@@ -13,7 +13,10 @@ async function processDeployments() {
     processing = true;
     try {
         let deployments = await getData('deployments');
-        deployments = deployments.filter(deployment => deployment.status !== 'processed');
+
+        deployments = deployments.filter(deployment => deployment.status !== 'processed' || (deployment.approved === 'true' && deployment.status === 'processed' && !!deployment.nextTag && deployment.deployed !== true));
+
+
         if (deployments.length > 0) {
             for (const deployment of deployments) {
                 console.log('Processing deployment:', deployment);
@@ -47,7 +50,7 @@ async function deployTicket(deployment, repoPath) {
 
     deployment.processingBranchErrors = [];
     deployment.processingLogs = [];
-    
+
     try {
         console.log(`src/gitlab.js ${functionName} Starting deployment processing`, { deployment });
 
@@ -61,18 +64,31 @@ async function deployTicket(deployment, repoPath) {
         console.log(`src/gitlab.js ${functionName} Found branches to process`, { branches });
 
 
+        let localPreprodBranch = PREPROD_BRANCH.split('origin/').join('');
+
+        // 2.1 Checkout preprod-branch and reset
+        await git.checkoutBranch(repoPath, localPreprodBranch);
         
+        await git.resetHard(repoPath, PREPROD_BRANCH);
+
 
         // 2. Process each branch
         for (const branch of branches) {
             try {
                 deployment.processingLogs = deployment.processingLogs || [];
-                
+
+                if (deployment.blacklistedBranches.some(blacklisted => branch.includes(blacklisted))) {
+                    console.log(`src/gitlab.js ${functionName} Skipping blacklisted branch`, { branch });
+                    deployment.processingLogs.push({
+                        branch,
+                        message: `Branch blacklisted`
+                    });
+                    continue;
+                }
+
+
                 console.log(`src/gitlab.js ${functionName} Processing branch`, { branch });
 
-                // 2.1 Checkout preprod-branch and reset
-                await git.checkoutBranch(repoPath, PREPROD_BRANCH);
-                await git.resetHard(repoPath);
 
                 // 2.2 Check if branch is already merged
                 const isMerged = await git.isBranchMerged(repoPath, branch);
@@ -85,10 +101,15 @@ async function deployTicket(deployment, repoPath) {
                     continue;
                 }
 
+                
+                
+
                 // 2.3 Pull branch with conflict handling
                 console.log(`src/gitlab.js ${functionName} Pulling branch`, { branch });
                 const pullResult = await git.pullBranch(repoPath, branch);
+
                 
+
                 if (!pullResult.success) {
                     if (pullResult.error.includes('CONFLICT')) {
                         console.log(`src/gitlab.js ${functionName} Merge conflict detected, skipping branch`, { branch });
@@ -115,6 +136,8 @@ async function deployTicket(deployment, repoPath) {
                     });
                 }
 
+                
+
                 // Dedupe logs
                 deployment.processingLogs = deployment.processingLogs.filter((log, index) => {
                     return deployment.processingLogs.findIndex(l => l.branch === log.branch) === index;
@@ -123,7 +146,7 @@ async function deployTicket(deployment, repoPath) {
                 deployment.processedBranches = deployment.processedBranches || [];
                 deployment.processedBranches.push(branch);
                 deployment.processedBranches = [...new Set(deployment.processedBranches)];
-                
+
                 await setDataPushUpdateIfExists('deployments', {
                     ...deployment
                 }, (item) => item.id === deployment.id);
@@ -134,7 +157,7 @@ async function deployTicket(deployment, repoPath) {
                     message: err.message,
                     stack: err.stack
                 });
-                
+
                 deployment.processingBranchErrors = deployment.processingBranchErrors || [];
                 deployment.processingBranchErrors.push({
                     branch,
@@ -148,36 +171,55 @@ async function deployTicket(deployment, repoPath) {
             }
         }
 
-        // 3. Only calculate tag if changes were made
-        if (!hasChanges) {
-            console.log(`src/gitlab.js ${functionName} No changes made, skipping tag calculation`);
-            return false;
+        //if approved and nextTag, try pushing preprod and tag
+        if (deployment.approved === 'true' && deployment.nextTag) {
+
+            await git.createTag(repoPath, deployment.nextTag);
+            
+            await git.pushBranchAndTag(repoPath, localPreprodBranch, deployment.nextTag)
+
+            deployment.processingLogs.push({
+                branch: localPreprodBranch,
+                tag: deployment.nextTag
+            });
+            deployment.deployed = true;
+            await setDataPushUpdateIfExists('deployments', {
+                ...deployment
+            }, (item) => item.id === deployment.id);
+        } else {
+
+            // 3. Only calculate tag if changes were made
+            if (!hasChanges) {
+                console.log(`src/gitlab.js ${functionName} No changes made, skipping tag calculation`);
+                return false;
+            }
+
+            // 4. Calculate next tag
+            const prodTag = await git.getLatestTag(repoPath, PRODUCTION_BRANCH);
+            const preprodTag = await git.getLatestTag(repoPath, PREPROD_BRANCH);
+            const nextTag = calculateNextTag(prodTag, preprodTag);
+
+            console.log(`src/gitlab.js ${functionName} Tag calculation complete`, {
+                prodTag,
+                preprodTag,
+                nextTag
+            });
+
+            // 5. Output result and update deployment
+            console.log(`Next tag would be ${nextTag}`);
+            await setDataPushUpdateIfExists('deployments', {
+                ...deployment,
+                nextTag
+            }, (item) => item.id === deployment.id);
+
         }
-
-        // 4. Calculate next tag
-        const prodTag = await git.getLatestTag(repoPath, PRODUCTION_BRANCH);
-        const preprodTag = await git.getLatestTag(repoPath, PREPROD_BRANCH);
-        const nextTag = calculateNextTag(prodTag, preprodTag);
-
-        console.log(`src/gitlab.js ${functionName} Tag calculation complete`, {
-            prodTag,
-            preprodTag,
-            nextTag
-        });
-
-        // 5. Output result and update deployment
-        console.log(`Next tag would be ${nextTag}`);
-        await setDataPushUpdateIfExists('deployments', {
-            ...deployment,
-            nextTag
-        }, (item) => item.id === deployment.id);
 
     } catch (err) {
         console.log(`src/gitlab.js ${functionName} Deployment processing failed`, {
             message: err.message,
             stack: err.stack
         });
-        
+
         deployment.processingErrors = deployment.processingErrors || [];
         deployment.processingErrors.push({
             message: err.message,
@@ -186,10 +228,11 @@ async function deployTicket(deployment, repoPath) {
         await setDataPushUpdateIfExists('deployments', {
             ...deployment
         }, (item) => item.id === deployment.id);
-    }finally{
+    } finally {
         await setDataPushUpdateIfExists('deployments', {
             processingBranchErrors: deployment.processingBranchErrors,
-            processingLogs: deployment.processingLogs
+            processingLogs: deployment.processingLogs,
+            updatedAt: new Date().toISOString()
         }, (item) => item.id === deployment.id);
     }
 }
