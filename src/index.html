@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,6 +13,7 @@
             padding-left: 1.5rem;
             border-left: 2px solid #e2e8f0;
         }
+
         .log-entry:before {
             content: '';
             position: absolute;
@@ -22,43 +24,52 @@
             border-radius: 50%;
             background: #4f46e5;
         }
+
         .log-entry:last-child {
             border-left-color: transparent;
         }
+
         .branch-list {
             display: flex;
             flex-wrap: wrap;
             gap: 0.5rem;
         }
+
         .branch-item {
             display: flex;
             align-items: center;
             gap: 0.25rem;
         }
+
         .content-preview {
             display: -webkit-box;
             -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;  
+            -webkit-box-orient: vertical;
             overflow: hidden;
             text-overflow: ellipsis;
         }
+
         /* Custom scrollbar */
         ::-webkit-scrollbar {
             width: 8px;
             height: 8px;
         }
+
         ::-webkit-scrollbar-track {
             background: #f1f1f1;
         }
+
         ::-webkit-scrollbar-thumb {
             background: #c7d2fe;
             border-radius: 10px;
         }
+
         ::-webkit-scrollbar-thumb:hover {
             background: #a5b4fc;
         }
     </style>
 </head>
+
 <body class="bg-gray-50 min-h-screen">
     <div class="container mx-auto px-4 py-8">
         <!-- Header -->
@@ -75,9 +86,12 @@
                     <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                         <i class="fas fa-search text-gray-400"></i>
                     </div>
-                    <input type="text" id="search-input" class="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 p-2.5" placeholder="Search deployments...">
+                    <input type="text" id="search-input"
+                        class="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 p-2.5"
+                        placeholder="Search deployments...">
                 </div>
-                <button class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition">
+                <button
+                    class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition">
                     <i class="fas fa-sync-alt"></i>
                     Refresh
                 </button>
@@ -90,7 +104,7 @@
                 <div class="flex items-center justify-between">
                     <div>
                         <p class="text-sm font-medium text-gray-500">Total Deployments</p>
-                        <p class="text-2xl font-semibold text-gray-800">1</p>
+                        <p id="total-deployments" class="text-2xl font-semibold text-gray-800">0</p>
                     </div>
                     <div class="bg-indigo-100 p-3 rounded-full">
                         <i class="fas fa-list text-indigo-600"></i>
@@ -101,7 +115,7 @@
                 <div class="flex items-center justify-between">
                     <div>
                         <p class="text-sm font-medium text-gray-500">Processed</p>
-                        <p class="text-2xl font-semibold text-gray-800">1</p>
+                        <p id="processed-deployments" class="text-2xl font-semibold text-gray-800">0</p>
                     </div>
                     <div class="bg-green-100 p-3 rounded-full">
                         <i class="fas fa-check-circle text-green-600"></i>
@@ -112,7 +126,7 @@
                 <div class="flex items-center justify-between">
                     <div>
                         <p class="text-sm font-medium text-gray-500">Pending</p>
-                        <p class="text-2xl font-semibold text-gray-800">0</p>
+                        <p id="pending-deployments" class="text-2xl font-semibold text-gray-800">0</p>
                     </div>
                     <div class="bg-blue-100 p-3 rounded-full">
                         <i class="fas fa-clock text-blue-600"></i>
@@ -123,7 +137,7 @@
                 <div class="flex items-center justify-between">
                     <div>
                         <p class="text-sm font-medium text-gray-500">Errors</p>
-                        <p class="text-2xl font-semibold text-gray-800">2</p>
+                        <p id="error-deployments" class="text-2xl font-semibold text-gray-800">0</p>
                     </div>
                     <div class="bg-red-100 p-3 rounded-full">
                         <i class="fas fa-exclamation-triangle text-red-600"></i>
@@ -138,7 +152,7 @@
             <div class="grid grid-cols-12 bg-gray-100 p-4 border-b text-sm font-medium text-gray-600">
                 <div class="col-span-4 md:col-span-5">Request Details</div>
                 <div class="col-span-4 md:col-span-2">Status</div>
-                <div class="col-span-2 md:col-span-2">Approval</div>
+                <div class="col-span-2 md:col-span-2">Human approval</div>
                 <div class="col-span-2 md:col-span-2">Updated</div>
                 <div class="col-span-0 md:col-span-1"></div>
             </div>
@@ -150,7 +164,8 @@
         </div>
 
         <!-- Deployment Details Modal -->
-        <div id="details-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 hidden">
+        <div id="details-modal"
+            class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 hidden">
             <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col">
                 <div class="flex justify-between items-center p-4 border-b">
                     <h3 class="text-xl font-semibold text-gray-800">Deployment Details</h3>
@@ -164,10 +179,15 @@
                     </div>
                 </div>
                 <div class="p-4 border-t flex justify-end gap-4">
-                    <button id="approve-btn" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 hidden">
+                    <button id="cancel-btn" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 ">
+                        <i class="fas fa-ban mr-2"></i> Cancel
+                    </button>
+                    <button id="approve-btn"
+                        class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 hidden">
                         <i class="fas fa-check mr-2"></i> Approve
                     </button>
-                    <button id="close-modal-btn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">
+                    <button id="close-modal-btn"
+                        class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">
                         Close
                     </button>
                     <span id="current-deployment-id" class="hidden"></span>
@@ -205,7 +225,7 @@
 
         //Deployments items will be injected from server on load
         //__INJECT_DEPLOYMENTS_FROM_SERVER_HERE__
-        
+
 
         // DOM elements
         const deploymentsContainer = document.getElementById('deployments-container');
@@ -214,13 +234,14 @@
         const closeModal = document.getElementById('close-modal');
         const closeModalBtn = document.getElementById('close-modal-btn');
         const approveBtn = document.getElementById('approve-btn');
+        const cancelBtn = document.getElementById('cancel-btn');
         const currentDeploymentId = document.getElementById('current-deployment-id');
 
         // Format date to readable string
         function formatDate(dateString) {
-            const options = { 
-                year: 'numeric', 
-                month: 'short', 
+            const options = {
+                year: 'numeric',
+                month: 'short',
                 day: 'numeric',
                 hour: '2-digit',
                 minute: '2-digit'
@@ -228,15 +249,20 @@
             return new Date(dateString).toLocaleDateString('en-US', options);
         }
 
-        // Generate status badge
+        // Get status badge
         function getStatusBadge(status) {
-            const statusMap = {
-                'processed': { color: 'bg-green-100 text-green-800', icon: 'fa-check-circle' },
-                'processing': { color: 'bg-blue-100 text-blue-800', icon: 'fa-sync-alt fa-spin' },
-                'failed': { color: 'bg-red-100 text-red-800', icon: 'fa-exclamation-circle' },
-                'pending': { color: 'bg-yellow-100 text-yellow-800', icon: 'fa-clock' }
-            };
-            return statusMap[status] || { color: 'bg-gray-100 text-gray-800', icon: 'fa-question-circle' };
+            switch(status) {
+                case 'pending':
+                    return { color: 'bg-blue-100 text-blue-800', icon: 'fa-clock' };
+                case 'processing':
+                    return { color: 'bg-yellow-100 text-yellow-800', icon: 'fa-spinner fa-spin' };
+                case 'processed':
+                    return { color: 'bg-green-100 text-green-800', icon: 'fa-check-circle' };
+                case 'canceled':
+                    return { color: 'bg-gray-100 text-gray-800', icon: 'fa-ban' };
+                default:
+                    return { color: 'bg-gray-100 text-gray-600', icon: 'fa-question-circle' };
+            }
         }
 
         // Generate approval badge
@@ -258,9 +284,13 @@
         }
 
         // Render deployment items
-        function renderDeployments() {
+        async function renderDeployments() {
+
+            const response = await fetch('/api/deployments');
+            window.deployments = await response.json();
+
             deploymentsContainer.innerHTML = '';
-            
+
             if (window.deployments.length === 0) {
                 deploymentsContainer.innerHTML = `
                     <div class="col-span-12 p-8 text-center text-gray-500">
@@ -276,7 +306,7 @@
                 const updatedAt = deployment.updatedAt || deployment.createdAt;
                 const contentPreview = stripHtml(deployment.content).substring(0, 100) + '...';
                 const hasErrors = deployment.processingBranchErrors && deployment.processingBranchErrors.length > 0;
-                
+
                 const deploymentItem = document.createElement('div');
                 deploymentItem.className = 'grid grid-cols-12 p-4 border-b hover:bg-gray-50 cursor-pointer transition';
                 deploymentItem.dataset.id = deployment.id;
@@ -329,6 +359,8 @@
                     showDeploymentDetails(id);
                 });
             });
+
+            updateMetrics();
         }
 
         // Show deployment details modal
@@ -337,12 +369,26 @@
             if (!deployment) return;
 
             currentDeploymentId.textContent = id;
+
+            // Show/hide approve button based on approval status, errors and canceled status
+            const hasErrors = deployment.processingBranchErrors && deployment.processingBranchErrors.length > 0;
+            const isCanceled = deployment.status === 'canceled';
             
-            // Show/hide approve button based on approval status
-            if (deployment.approved !== "true") {
-                approveBtn.classList.remove('hidden');
+            if (deployment.approved !== "true" && !isCanceled) {
+                if (hasErrors) {
+                    approveBtn.classList.add('hidden');
+                } else {
+                    approveBtn.classList.remove('hidden');
+                }
             } else {
                 approveBtn.classList.add('hidden');
+            }
+
+            // Show/hide cancel button based on status
+            if (!deployment.deployed) {
+                cancelBtn.classList.remove('hidden');
+            } else {
+                cancelBtn.classList.add('hidden');
             }
 
             // Build modal content
@@ -365,7 +411,7 @@
                                 </p>
                             </div>
                             <div>
-                                <span class="text-sm text-gray-500">Approval:</span>
+                                <span class="text-sm text-gray-500">Human approval:</span>
                                 <p class="font-medium">${getApprovalBadge(deployment.approved)}</p>
                             </div>
                             <div>
@@ -381,7 +427,7 @@
                             <div>
                                 <span class="text-sm text-gray-500">Processed branches:</span>
                                 <div class="branch-list mt-1">
-                                    ${deployment.processedBranches||[].map(branch => `
+                                    ${deployment.processedBranches || [].map(branch => `
                                         <span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded flex items-center gap-1">
                                             <i class="fas fa-check-circle"></i> ${branch}
                                         </span>
@@ -391,7 +437,7 @@
                             <div>
                                 <span class="text-sm text-gray-500">Blacklisted branches:</span>
                                 <div class="branch-list mt-1">
-                                    ${deployment.blacklistedBranches||[].map(branch => `
+                                    ${deployment.blacklistedBranches || [].map(branch => `
                                         <span class="bg-red-100 text-red-800 text-xs px-2 py-1 rounded flex items-center gap-1">
                                             <i class="fas fa-ban"></i> ${branch}
                                         </span>
@@ -417,9 +463,9 @@
                             <div>
                                 <span class="text-sm text-gray-500">Deployed:</span>
                                 <p class="font-medium">
-                                    ${deployment.deployed ? 
-                                        '<span class="text-green-600"><i class="fas fa-check-circle"></i> Yes</span>' : 
-                                        '<span class="text-yellow-600"><i class="fas fa-clock"></i> Pending</span>'}
+                                    ${deployment.deployed ?
+                    '<span class="text-green-600"><i class="fas fa-check-circle"></i> Yes</span>' :
+                    '<span class="text-yellow-600"><i class="fas fa-clock"></i> Pending</span>'}
                                 </p>
                             </div>
                         </div>
@@ -435,7 +481,26 @@
                     </div>
                     
                     <div class="bg-gray-50 p-4 rounded-lg">
-                        <h4 class="font-medium text-gray-700 mb-2"><i class="fas fa-history mr-2 text-indigo-500"></i>Processing Logs</h4>
+                        <h4 class="font-medium text-gray-700 mb-2">
+                            <i class="fas fa-history mr-2 text-indigo-500"></i>Processing Logs
+                            ${hasErrors ? '<span class="ml-2 text-xs px-2 py-0.5 bg-red-100 text-red-800 rounded">Has Errors</span>' : ''}
+                        </h4>
+                        ${hasErrors ? `
+                            <div class="mb-4 bg-red-50 border border-red-200 rounded p-3">
+                                <h5 class="text-sm font-medium text-red-800 mb-2">Processing Errors:</h5>
+                                ${deployment.processingBranchErrors.map(error => `
+                                    <div class="mb-2 last:mb-0">
+                                        <div class="text-sm font-medium text-red-800">Branch: ${error.branch}</div>
+                                        <div class="text-sm text-red-600 mt-1">
+                                            <div class="font-mono bg-red-100 p-2 rounded text-xs overflow-x-auto">
+                                                <div>Message: ${error.message}</div>
+                                                ${error.stack ? `<div class="mt-1">Stack: ${error.stack}</div>` : ''}
+                                            </div>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : ''}
                         <div class="space-y-4 mt-2 pl-4">
                             ${deployment.processingLogs.map(log => `
                                 <div class="log-entry">
@@ -450,7 +515,7 @@
                     </div>
                 </div>
             `;
-            
+
             modalContent.innerHTML = content;
             detailsModal.classList.remove('hidden');
         }
@@ -458,19 +523,84 @@
         // Mark deployment as approved
         function markApproved(deployment) {
             if (confirm(`Are you sure you want to approve this deployment request from ${deployment.from}?`)) {
-                deployment.approved = "true";
-                if (deployment.status === 'pending') {
-                    deployment.status = 'processing';
-                    deployment.updatedAt = new Date().toISOString();
-                }
-                renderDeployments();
-                detailsModal.classList.add('hidden');
+
+                fetch('/api/deployments', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        id: deployment.id,
+                        status: 'processing'
+                    })
+                })
+                    .then(response => response.json())
+                    .then(() => {
+                        deployment.approved = "true";
+                        if (deployment.status === 'pending') {
+                            deployment.status = 'processing';
+                            deployment.updatedAt = new Date().toISOString();
+                        }
+                        renderDeployments();
+                        detailsModal.classList.add('hidden');
+                    })
+                    .catch(error => {
+                        console.error('Error marking deployment as approved:', error);
+                    })
+
             }
+        }
+
+        // Cancel deployment
+        function cancelDeployment(deployment) {
+            if (confirm(`Are you sure you want to cancel this deployment request from ${deployment.from}?`)) {
+                console.log(`Canceling deployment ${deployment.id}`)
+                
+                fetch(`/api/deployments/${deployment.id}/cancel`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(response => response.text())
+                .then(() => {
+                    deployment.status = 'canceled';
+                    deployment.updatedAt = new Date().toISOString();
+                    renderDeployments();
+                    detailsModal.classList.add('hidden');
+                })
+                .catch(error => {
+                    console.error('Error canceling deployment:', error);
+                });
+            }
+        }
+
+        // Update metrics function
+        function updateMetrics() {
+            const total = window.deployments.length;
+            const processed = window.deployments.filter(d => d.status === 'processed').length;
+            const pending = window.deployments.filter(d => d.status === 'pending').length;
+            const errors = window.deployments.filter(d => d.processingBranchErrors && d.processingBranchErrors.length > 0).length;
+
+            document.getElementById('total-deployments').textContent = total;
+            document.getElementById('processed-deployments').textContent = processed;
+            document.getElementById('pending-deployments').textContent = pending;
+            document.getElementById('error-deployments').textContent = errors;
         }
 
         // Event listeners for modal
         closeModal.addEventListener('click', () => {
             detailsModal.classList.add('hidden');
+        });
+
+        document.addEventListener('click', (e) => {
+            if (e.target && e.target.id === 'cancel-btn') {
+                const id = currentDeploymentId.textContent;
+                const deployment = window.deployments.find(d => d.id === id);
+                if (deployment) {
+                    cancelDeployment(deployment);
+                }
+            }
         });
 
         closeModalBtn.addEventListener('click', () => {
@@ -496,4 +626,5 @@
         renderDeployments();
     </script>
 </body>
+
 </html>

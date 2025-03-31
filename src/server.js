@@ -28,6 +28,53 @@ window.deployments = ${JSON.stringify(data.deployments)}
     res.send(newHtml)
 })
 
+app.get('/api/deployments', (req, res) => {
+    const data = require(path.join(process.cwd(), 'data.json'))
+    res.send(data.deployments.sort((a, b) => {
+        const aDate = a.updatedAt || a.createdAt
+        const bDate = b.updatedAt || b.createdAt
+        return aDate - bDate
+    }))
+})
+
+app.put('/api/deployments', async (req, res) => {
+    const {id, status} = req.body
+    const data = require(path.join(process.cwd(), 'data.json'))
+    const deployment = data.deployments.find(d => d.id === id)
+    if (!deployment) {
+        return res.status(404).send('Deployment not found')
+    }
+    
+    // Prevent modifying canceled deployments
+    if (deployment.status === 'canceled') {
+        return res.status(400).send('Cannot modify canceled deployments')
+    }
+    
+    deployment.status = status
+    deployment.updatedAt = new Date().toISOString()
+    await fs.writeFile(path.join(process.cwd(), 'data.json'), JSON.stringify(data, null, 2))
+    res.send('Deployment updated')
+})
+
+app.post('/api/deployments/:id/cancel', async (req, res) => {
+    console.log('server.js cancelDeployment', { id: req.params.id })
+    const data = require(path.join(process.cwd(), 'data.json'))
+    const deployment = data.deployments.find(d => d.id === req.params.id)
+    if (!deployment) {
+        return res.status(404).send('Deployment not found')
+    }
+    
+    // Only allow canceling non-deployed deployments
+    if (deployment.deployed) {
+        return res.status(400).send('Can only cancel non-deployed deployments')
+    }
+    
+    deployment.status = 'canceled'
+    deployment.updatedAt = new Date().toISOString()
+    await fs.writeFile(path.join(process.cwd(), 'data.json'), JSON.stringify(data, null, 2))
+    res.send('Deployment canceled')
+})
+
 app.listen(PORT, () => {
     console.log(`Server running at http://localhost:${PORT}`);
 });
