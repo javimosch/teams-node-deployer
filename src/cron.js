@@ -1,7 +1,7 @@
 const cron = require('node-cron');
 const {getData, setDataPushIfNotExists} = require("./db");
 const {processDeployments} = require("./gitlab");
-const {refreshTokenIfAboutToExpire} = require('./auth')
+const {refreshTokenIfAboutToExpire, onInvalidToken} = require('./auth')
 const {getLatestMessages} = require('./helpers')
 
 module.exports = {
@@ -25,14 +25,7 @@ async function configureCronJobs() {
     });
 
 
-    async function onInvalidToken() {
-        console.log("WARN: Invalid token, user should re-authenticate")
-        let accessToken = await getData('accessToken');
-        let refreshToken = await getData('refreshToken');
-        if (accessToken && refreshToken) {
-            await refreshTokenIfAboutToExpire(accessToken, refreshToken);
-        }
-    }
+    
 
 
     async function runCronHandler() {
@@ -49,7 +42,7 @@ async function configureCronJobs() {
             let accessToken = await getData('accessToken');
             let chatId = process.env.CHAT_ID
             let messages = await getLatestMessages(accessToken, chatId)
-            messages = messages.map(message => ({
+            messages = messages||[].map(message => ({
                 id: message.id,
                 from: message.from.user.displayName,
                 content: message.body.content,

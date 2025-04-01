@@ -14,7 +14,7 @@ async function processDeployments() {
     try {
         let deployments = await getData('deployments');
 
-        deployments = deployments
+        deployments = deployments||[]
         .filter(dpl=>dpl.status !== 'canceled')
         .filter(deployment => deployment.status !== 'processed' || (deployment.approved === 'true' && deployment.status === 'processed' && !!deployment.nextTag && deployment.deployed !== true))
 

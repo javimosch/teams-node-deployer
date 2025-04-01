@@ -1,5 +1,6 @@
 
 const axios = require("axios");
+const { onInvalidToken } = require("./auth");
 
 module.exports = {
     getLatestMessages
@@ -65,6 +66,12 @@ async function getLatestMessages(accessToken, chatId) {
         return response.data.value;
     } catch (error) {
         console.error('Error fetching messages:', error.response ? error.response.data : error.message);
+
+        if (error.code === 'InvalidAuthenticationToken') {
+            onInvalidToken()
+            return
+        }
+
     }
 }
 

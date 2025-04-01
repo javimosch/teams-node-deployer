@@ -1,5 +1,17 @@
 const fs = require("fs");
 
+
+
+async function ensureDbFile(){
+    try {
+        console.log('Checking for data.json')
+        await fs.promises.access('data.json');
+    } catch (error) {
+        await fs.promises.writeFile('data.json', JSON.stringify({}), 'utf8');
+        console.log('Created data.json')
+    }
+}
+
 async function persistAccessToken(accessToken) {
     await setData('accessToken', accessToken);
 }
@@ -91,6 +103,7 @@ async function pruneDupes(key,idKey='id'){
 }
 
 module.exports = {
+    ensureDbFile,
     persistAccessToken,
     persistRefreshToken,
     getData,

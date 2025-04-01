@@ -6,7 +6,8 @@
   "license":"MIT",
   "scripts": {
     "start": "node server.js",
-    "dev": "npx -y nodemon src/server.js --watch .env --watch src -e js,env"
+    "dev": "npx -y nodemon src/server.js --watch .env --watch src -e js,env",
+    "publish":"docker compose build && docker push javimosch/teams-node-deployer:latest"
   },
   "dependencies": {
     "axios": "^1.8.4",

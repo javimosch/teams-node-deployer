@@ -91,13 +91,31 @@ function configureAuthRoutes(app) {
 
 }
 
+async function onInvalidToken() {
+    console.log("WARN: Invalid token, user should re-authenticate")
+    let accessToken = await getData('accessToken');
+    let refreshToken = await getData('refreshToken');
+    if (accessToken && refreshToken) {
+        await refreshTokenIfAboutToExpire(accessToken, refreshToken);
+    }
+}
+
 module.exports = {
     refreshTokenIfAboutToExpire,
+    onInvalidToken,
     configureAuthRoutes
 }
 
 async function refreshTokenIfAboutToExpire(accessToken, refreshToken) {
     try {
+
+        if(!accessToken || !refreshToken) {
+            console.log("WARN: No access token or refresh token found, user should re-authenticate");
+            return;
+        }else{
+            console.log("INFO: Access token or refresh token found, refreshing...");
+        }
+
         // Decode the access token to get the expiration time
         const decodedToken = JSON.parse(Buffer.from(accessToken.split('.')[1], 'base64').toString());
         const expirationTime = decodedToken.exp * 1000;  // Convert to milliseconds

@@ -1,0 +1,7 @@
+.env
+node_modules
+tmp
+data.json
+README.md
+env-example
+dist

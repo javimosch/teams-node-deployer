@@ -9,12 +9,15 @@ const PORT = process.env.PORT || 3000;
 const { configureAuthRoutes} = require('./auth')
 const {configureCronJobs} = require('./cron')
 const {processDeployments} = require("./gitlab");
+const {ensureDbFile} = require("./db");
 
 // /login /logout /auth/callback
 configureAuthRoutes(app)
 
 // fetch messages and process deployments 
-configureCronJobs()
+ensureDbFile().then(() => {
+    configureCronJobs()
+})
 
 app.use(express.json());
 
