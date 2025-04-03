@@ -22,7 +22,13 @@ ensureDbFile().then(() => {
 app.use(express.json());
 
 async function getDeployments() {
-    const data = JSON.parse(await fs.readFile(path.join(process.cwd(), 'data.json'), 'utf8'));
+    let data 
+    try{
+        data= JSON.parse(await fs.readFile(path.join(process.cwd(), 'data.json'), 'utf8'));
+    } catch (e) {
+        console.error('Error reading data.json:', e)
+        return []
+    }
     return (data.deployments || []).sort((a, b) => {
         const aDate = new Date(a.updatedAt ?? a.createdAt).getTime();
         const bDate = new Date(b.updatedAt ?? b.createdAt).getTime();
@@ -57,7 +63,7 @@ app.put('/api/deployments', async (req, res) => {
     }
 
     // Only allow setting status to pending if deployment is processed and not approved
-    if (status === 'pending' && (deployment.status !== 'processed' || deployment.approved === "true")) {
+    if (status === 'pending' && (deployment.status !== 'processed' )) {
         return res.status(400).send('Can only mark as pending processed and non-approved deployments')
     }
     
@@ -101,12 +107,13 @@ app.post('/api/deployments/:id/cancel', async (req, res) => {
 app.post('/api/deployments/process', async (req, res) => {
     console.log('server.js POST /api/deployments/process received');
     try {
-        // Call processDeployments asynchronously, don't wait for it to finish
-        processDeployments(); 
-        res.status(202).send('Deployment processing initiated');
+        // Call processDeployments and wait for it to finish
+        await processDeployments(); 
+        console.log('server.js POST /api/deployments/process finished processing');
+        res.status(200).send('Deployment processing completed'); // Respond with 200 OK
     } catch (error) {
-        console.error('Error initiating deployment processing:', error);
-        res.status(500).send('Failed to initiate deployment processing');
+        console.error('Error processing deployments:', error);
+        res.status(500).send('Failed to process deployments');
     }
 });
 

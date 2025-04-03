@@ -285,16 +285,15 @@
 
                 if (!response.ok) {
                     const errorText = await response.text();
-                    throw new Error(errorText || 'Failed to start processing');
+                    throw new Error(errorText || 'Failed to process deployments');
                 }
 
-                showToast('Deployment processing started successfully.', 'success'); // Use toast
-                // Optionally refresh the list after a delay
-                setTimeout(fetchDeployments, 3000);
+                showToast('Deployment processing completed successfully.', 'success'); // Update toast message
+                fetchDeployments(); // Refresh the list immediately after success
 
             } catch (err) {
                 console.error('Error processing deployments:', err);
-                showToast('Error starting deployment processing: ' + err.message, 'error'); // Use toast
+                showToast('Error processing deployments: ' + err.message, 'error'); // Use toast
             } finally {
                 processDeploymentsBtn.disabled = false;
                 processDeploymentsBtn.innerHTML = '<i class="fas fa-cogs mr-2"></i> Process Deployments';
@@ -316,34 +315,59 @@
             return new Date(dateString).toLocaleDateString('en-US', options);
         }
 
-        // Get status badge
-        function getStatusBadge(status) {
+        // Get status e
+        function getStatuse(status,deployment) {
             status = status || 'pending';
-            let badge;
+            let e;
             switch (status) {
                 case 'pending':
-                    badge = { color: 'bg-blue-100 text-blue-800', icon: 'fa-clock' };
+                    e = { color: 'bg-blue-100 text-blue-800', icon: 'fa-clock' };
                     break;
                 case 'processing':
-                    badge = { color: 'bg-yellow-100 text-yellow-800', icon: 'fa-spinner fa-spin' };
+                    e = { color: 'bg-yellow-100 text-yellow-800', icon: 'fa-spinner fa-spin' };
                     break;
                 case 'processed':
-                    badge = { color: 'bg-green-100 text-green-800', icon: 'fa-check-circle' };
+                    e = { color: 'bg-green-100 text-green-800', icon: 'fa-check-circle' };
+                    break;
+                case 'deployed':
+                    e = { color: 'bg-purple-100 text-purple-800', icon: 'fa-rocket' };
+                    break;
+                case 'errored':
+                    e = { color: 'bg-red-100 text-red-800', icon: 'fa-exclamation-circle' };
                     break;
                 case 'canceled':
-                    badge = { color: 'bg-gray-100 text-gray-800', icon: 'fa-ban' };
+                    e = { color: 'bg-gray-100 text-gray-800', icon: 'fa-ban' };
+                    break;
+                case 'skipped':
+                    e = { color: 'bg-gray-100 text-gray-600', icon: 'fa-arrow-right' };
                     break;
                 default:
-                    badge = { color: 'bg-gray-100 text-gray-600', icon: 'fa-question-circle' };
+                    e = { color: 'bg-gray-100 text-gray-600', icon: 'fa-question-circle' };
             }
-            return `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${badge.color}">
-                <i class="fas ${badge.icon} mr-1"></i>
-                ${status.charAt(0).toUpperCase() + status.slice(1)}
+
+            let label  = ({
+                errored:"Failed",
+                skipped:'Skipped',
+                processed:'Ready',
+                deployed:'Deployed'
+            })[status] || status;
+
+            let title = label
+
+            if(status==='skipped' && deploymentHasLog(deployment,['tag','already'])){
+                title = deploymentLogGet(deployment,['tag','already']).message
+            }
+
+            return `<span 
+            title="${title}"
+            class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${e.color}">
+                <i class="fas ${e.icon} mr-1"></i>
+                ${label}
             </span>`;
         }
 
-        // Generate approval badge
-        function getApprovalBadge(approved) {
+        // Generate approval e
+        function getApprovale(approved) {
             if (approved === true) {
                 return '<span class="px-2 py-1 rounded-full bg-green-100 text-green-800 text-xs flex items-center gap-1"><i class="fas fa-check-circle"></i> Approved</span>';
             } else if (approved === false) {
@@ -358,6 +382,30 @@
             const tmp = document.createElement("div");
             tmp.innerHTML = html;
             return tmp.textContent || tmp.innerText || "";
+        }
+
+        function deploymentHasLog(deployment,strs) {
+            return deployment.processingLogs.some(log => strs.filter(s => (log.message||'').toLowerCase().includes(s)).length === strs.length)
+        }
+        function deploymentLogGet(deployment,strs) {
+            return deployment.processingLogs.find(log => strs.filter(s => (log.message||'').toLowerCase().includes(s)).length === strs.length)
+        }
+
+        function computeStatus(deployment) {
+            
+            let some = str => deployment.processingLogs.some(log => (log.message||'').toLowerCase().includes(str))
+          
+            if(deployment.status === 'processed'&&deployment.deployed === true){
+                return 'deployed'
+            }
+
+            if(deploymentHasLog(deployment,['tag','already'])){
+                return 'skipped'
+            }
+            if (some('error') || some('fatal')) {
+                return 'errored';
+            }
+            return deployment.status;
         }
 
         // Render deployment items
@@ -375,7 +423,10 @@
             }
 
             filteredDeployments.forEach(deployment => {
-                const statusBadge = getStatusBadge(deployment.status);
+
+                
+
+                const statuse = getStatuse(computeStatus(deployment),deployment);
                 const updatedAt = deployment.updatedAt || deployment.createdAt;
                 const contentPreview = stripHtml(deployment.content).substring(0, 100) + '...';
                 const hasErrors = deployment.processingBranchErrors && deployment.processingBranchErrors.length > 0;
@@ -395,11 +446,11 @@
                         </div>` : ''}
                     </div>
                     <div class="col-span-4 md:col-span-2 flex items-center">
-                        ${statusBadge}
+                        ${statuse}
                         ${hasErrors ? '<i class="fas fa-exclamation-circle text-red-500 ml-2"></i>' : ''}
                     </div>
                     <div class="col-span-2 md:col-span-2 flex items-center">
-                        ${deployment.nextTag ? getApprovalBadge(deployment.approved) : ''}
+                        ${deployment.nextTag ? getApprovale(deployment.approved) : ''}
                     </div>
                     <div class="col-span-2 md:col-span-2 flex items-center text-sm text-gray-500">
                         ${formatDate(updatedAt)}
@@ -467,7 +518,7 @@
             }
 
             // Show/hide mark as pending button based on status
-            if (deployment.status === 'processed' && deployment.approved !== "true") {
+            if (deployment.status === 'processed' ) {
                 markPendingBtn.classList.remove('hidden');
             } else {
                 markPendingBtn.classList.add('hidden');
@@ -486,7 +537,7 @@
                     </div>
                     <div>
                         <h4 class="text-sm font-medium text-gray-500">Status</h4>
-                        <div class="mt-1">${getStatusBadge(deployment.status)}</div>
+                        <div class="mt-1">${getStatuse(computeStatus(deployment),deployment)}</div>
                     </div>
                     ${deployment.processedBranches ? `
                         <div>
@@ -560,7 +611,7 @@
                 })
                     //.then(response => response.json())
                     .then(() => {
-                        deployment.approved = "true";
+                        deployment.approved = true;
                         if (deployment.status === 'pending') {
                             deployment.status = 'processing';
                             deployment.updatedAt = new Date().toISOString();
@@ -613,7 +664,9 @@
                     },
                     body: JSON.stringify({
                         id: deployment.id,
-                        status: 'pending'
+                        status: 'pending',
+                        processingLogs:[],
+                        processingBranchErrors:[]
                     })
                 });
 
