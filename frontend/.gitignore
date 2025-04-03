@@ -1,0 +1,14 @@
+# Nuxt specific
+.nuxt
+.output
+dist
+node_modules
+
+# Environment
+.env
+
+# IDE / OS specific
+.vscode
+.idea
+*.iml
+*.DS_Store
