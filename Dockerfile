@@ -12,9 +12,10 @@ RUN bun install --frozen-lockfile || (echo "Lockfile mismatch detected. Regenera
 
 # Copy the rest of the application code
 COPY src ./src
+COPY frontend ./frontend
 
 # Build the server
-RUN bun build ./src/server.js --outfile=dist/server.mjs --target node
+RUN bun build ./src/server.js --outfile=dist/server.mjs --target node && cd frontend && bun run generate
 
 FROM oven/bun:alpine
 
@@ -25,7 +26,7 @@ WORKDIR /usr/src/app
 
 # Copy the built application
 COPY --from=builder /build-stage/dist ./dist
-COPY --from=builder /build-stage/src/index.html ./src/index.html
+COPY --from=builder /build-stage/frontend/.output/public ./frontend/.output/public
 
 # Set the entrypoint
 CMD ["bun", "dist/server.mjs"]
