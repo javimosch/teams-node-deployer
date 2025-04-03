@@ -1,7 +1,5 @@
 const fs = require("fs");
 
-
-
 async function ensureDbFile(){
     try {
         console.log('Checking for data.json')
@@ -102,6 +100,34 @@ async function pruneDupes(key,idKey='id'){
     await setData(key, data)
 }
 
+async function getAllData() {
+    try {
+        const data = await fs.promises.readFile('data.json', 'utf8');
+        return JSON.parse(data);
+    } catch (error) {
+        console.error(`Error getting all data:`, error);
+        // Return an empty object or handle appropriately if file doesn't exist or is invalid
+        if (error.code === 'ENOENT') {
+            return {};
+        }
+        throw error; // Re-throw other errors
+    }
+}
+
+async function setAllData(newData) {
+    try {
+        // Basic validation: Ensure it's an object
+        if (typeof newData !== 'object' || newData === null) {
+            throw new Error('Invalid data format: Must be a JSON object.');
+        }
+        await fs.promises.writeFile('data.json', JSON.stringify(newData, null, 2));
+        console.log('Database overwritten successfully.');
+    } catch (error) {
+        console.error(`Error setting all data:`, error);
+        throw error; // Re-throw to be handled by the caller
+    }
+}
+
 module.exports = {
     ensureDbFile,
     persistAccessToken,
@@ -111,5 +137,7 @@ module.exports = {
     setDataPushIfNotExists,
     setDataPushUpdateIfExists,
     pruneDupes,
-    getById
+    getById,
+    getAllData,
+    setAllData
 }

@@ -10,7 +10,7 @@ const PORT = process.env.PORT || 3000;
 const { configureAuthRoutes, getAccessToken } = require('./auth');
 const { configureCronJobs, restartCronJobs } = require('./cron');
 const { processDeployments } = require("./gitlab");
-const { ensureDbFile, getData, setData } = require("./db");
+const { ensureDbFile, getData, setData, getAllData, setAllData } = require("./db");
 const { getAllChats, getLatestMessage } = require("./helpers");
 const basicAuthMiddleware = require("express-basic-auth");
 
@@ -55,65 +55,114 @@ app.get('/api/deployments', async (req, res) => {
 app.put('/api/deployments', async (req, res) => {
     const { id, status, approved } = req.body
     console.log('server.js updateDeployment', { id, status })
-    const data = require(path.join(process.cwd(), 'data.json'))
-    const deployment = data.deployments.find(d => d.id === id)
-    if (!deployment) {
-        return res.status(404).send('Deployment not found')
+    let data;
+    try {
+        data = JSON.parse(await fs.readFile(path.join(process.cwd(), 'data.json'), 'utf8'));
+    } catch (e) {
+        console.error('Error reading data.json for update:', e);
+        return res.status(500).send('Error reading database file.');
     }
+
+    const deploymentIndex = data.deployments.findIndex(d => d.id === id);
+    if (deploymentIndex === -1) {
+        return res.status(404).send('Deployment not found');
+    }
+    const deployment = data.deployments[deploymentIndex];
 
     if (deployment.status === 'canceled') {
         return res.status(400).send('Cannot modify canceled deployments')
     }
 
-    if (status === 'pending' && (deployment.status !== 'processed')) {
-        return res.status(400).send('Can only mark as pending processed (found ' + deployment.status + ')')
+    if (status === 'pending' && !['processed', 'failed'].includes(deployment.status)) {
+         console.warn(`Attempted to mark deployment ${id} as pending from status ${deployment.status}`);
+         return res.status(400).send('Can only mark as pending from processed or failed status (found ' + deployment.status + ')')
     }
 
-    if (!!status) {
-        deployment.status = status
+    if (status === 'pending') {
+        deployment.status = 'pending';
+        deployment.processingLogs = [];
+        deployment.processingBranchErrors = [];
+        deployment.nextTag = null;
+        deployment.deployed = false;
+        deployment.approved = null;
+    } else if (!!status) {
+        deployment.status = status;
     }
 
     if (approved === true) {
-        deployment.approved = true
+        if (deployment.status !== 'processed') {
+             return res.status(400).send('Can only approve deployments with status "processed"');
+        }
+        deployment.approved = true;
+    } else if (approved === false) {
+        deployment.approved = false;
     }
 
     console.log('server.js updateDeployment', { id, status, approved, deployment })
 
     deployment.updatedAt = new Date().toISOString()
-    await fs.writeFile(path.join(process.cwd(), 'data.json'), JSON.stringify(data, null, 2))
+    data.deployments[deploymentIndex] = deployment;
 
-    setTimeout(() => processDeployments(), 1000)
+    try {
+        await fs.writeFile(path.join(process.cwd(), 'data.json'), JSON.stringify(data, null, 2));
+    } catch (e) {
+        console.error('Error writing data.json after update:', e);
+        return res.status(500).send('Error saving database changes.');
+    }
+
+    if (approved === true) {
+        console.log(`Deployment ${id} approved, triggering processing.`);
+        setTimeout(() => processDeployments(), 1000);
+    }
 
     res.json(deployment)
 })
 
 app.post('/api/deployments/:id/cancel', async (req, res) => {
     console.log('server.js cancelDeployment', { id: req.params.id })
-    const data = require(path.join(process.cwd(), 'data.json'))
-    const deployment = data.deployments.find(d => d.id === req.params.id)
-    if (!deployment) {
-        return res.status(404).send('Deployment not found')
+    let data;
+     try {
+        data = JSON.parse(await fs.readFile(path.join(process.cwd(), 'data.json'), 'utf8'));
+    } catch (e) {
+        console.error('Error reading data.json for cancel:', e);
+        return res.status(500).send('Error reading database file.');
     }
 
+    const deploymentIndex = data.deployments.findIndex(d => d.id === req.params.id);
+     if (deploymentIndex === -1) {
+        return res.status(404).send('Deployment not found');
+    }
+    const deployment = data.deployments[deploymentIndex];
+
     if (deployment.deployed) {
-        return res.status(400).send('Can only cancel non-deployed deployments')
+        return res.status(400).send('Cannot cancel already deployed deployments')
     }
 
     deployment.status = 'canceled'
+    deployment.approved = null;
     deployment.updatedAt = new Date().toISOString()
-    await fs.writeFile(path.join(process.cwd(), 'data.json'), JSON.stringify(data, null, 2))
-    res.send('Deployment canceled')
+    data.deployments[deploymentIndex] = deployment;
+
+    try {
+        await fs.writeFile(path.join(process.cwd(), 'data.json'), JSON.stringify(data, null, 2));
+        res.send('Deployment canceled');
+    } catch (e) {
+        console.error('Error writing data.json after cancel:', e);
+        res.status(500).send('Error saving database changes.');
+    }
 })
 
 app.post('/api/deployments/process', async (req, res) => {
     console.log('server.js POST /api/deployments/process received');
     try {
-        await processDeployments();
-        console.log('server.js POST /api/deployments/process finished processing');
-        res.status(200).send('Deployment processing completed');
+        processDeployments().catch(err => {
+            console.error("Background deployment processing failed:", err);
+        });
+        console.log('server.js POST /api/deployments/process triggered processing');
+        res.status(202).send('Deployment processing initiated');
     } catch (error) {
-        console.error('Error processing deployments:', error);
-        res.status(500).send('Failed to process deployments');
+        console.error('Error initiating deployment processing:', error);
+        res.status(500).send('Failed to initiate deployment processing');
     }
 });
 
@@ -256,6 +305,51 @@ app.post('/api/cron-configs/:id/test', async (req, res) => {
                          : error.message.includes('Chat not found') ? 404
                          : 500;
         res.status(statusCode).send(error.message || 'Failed to test channel.');
+    }
+});
+
+app.get('/api/db/export', async (req, res) => {
+    try {
+        const filePath = path.join(process.cwd(), 'data.json');
+        await fs.access(filePath);
+        res.setHeader('Content-Disposition', 'attachment; filename=data.json');
+        res.setHeader('Content-Type', 'application/json');
+        res.sendFile(filePath);
+    } catch (error) {
+        if (error.code === 'ENOENT') {
+            console.error('Export failed: data.json not found.');
+            res.status(404).send('Database file (data.json) not found.');
+        } else {
+            console.error('Error exporting database:', error);
+            res.status(500).send('Failed to export database.');
+        }
+    }
+});
+
+app.post('/api/db/import', async (req, res) => {
+    try {
+        const importData = req.body;
+
+        if (typeof importData !== 'object' || importData === null || Array.isArray(importData)) {
+             return res.status(400).send('Invalid JSON format. Expected a JSON object.');
+        }
+
+        await setAllData(importData);
+
+        if (importData.hasOwnProperty(CRON_CONFIG_KEY)) {
+            console.log("Imported data contains cron configurations, restarting cron jobs...");
+            await restartCronJobs();
+        }
+
+        if (importData.hasOwnProperty('deployments')) {
+             console.log("Imported data contains deployments, triggering processing check...");
+             setTimeout(() => processDeployments().catch(err => console.error("Post-import processing failed:", err)), 1000);
+        }
+
+        res.status(200).send('Database imported successfully.');
+    } catch (error) {
+        console.error('Error importing database:', error);
+        res.status(500).send(`Failed to import database: ${error.message}`);
     }
 });
 
