@@ -1,18 +1,19 @@
 {
-  "name":"teams-node-deployer",
-  "version":"1.0.0",
-  "description":"A deployment automation system that handles Git operations and version tagging for CI/CD pipelines. Manages branch merging conflicts and calculates semantic versioning tags automatically.",
-  "author":"Javier Arancibia",
-  "license":"MIT",
+  "name": "teams-node-deployer",
+  "version": "1.0.0",
+  "description": "A deployment automation system that handles Git operations and version tagging for CI/CD pipelines. Manages branch merging conflicts and calculates semantic versioning tags automatically.",
+  "author": "Javier Arancibia",
+  "license": "MIT",
   "scripts": {
     "start": "node server.js",
     "dev": "npx -y nodemon src/server.js --watch .env --watch src -e js,env",
-    "publish":"docker compose build && docker push javimosch/teams-node-deployer:latest"
+    "publish": "docker compose build && docker push javimosch/teams-node-deployer:latest"
   },
   "dependencies": {
     "axios": "^1.8.4",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "express-basic-auth": "^1.2.1",
     "node-cron": "^3.0.3",
     "openai": "^4.89.1",
     "qs": "^6.14.0"
