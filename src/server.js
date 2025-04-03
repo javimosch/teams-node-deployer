@@ -25,7 +25,9 @@ app.get('/', async(req, res) => {
     //read file
     const html = await fs.readFile(path.join(process.cwd(), 'src', 'index.html'), 'utf8');
     //replace with __INJECT_DEPLOYMENTS_FROM_SERVER_HERE__ from data from ./data.json
-    const data = require(path.join(process.cwd(), 'data.json'))
+    
+    const data = JSON.parse(await fs.readFile(path.join(process.cwd(), 'data.json'), 'utf8'))
+
     const newHtml = html.replace('//__INJECT_DEPLOYMENTS_FROM_SERVER_HERE__', `
 window.deployments = ${JSON.stringify(data.deployments)}
         `)

@@ -193,13 +193,27 @@ async function deployTicket(deployment, repoPath) {
         //if approved and nextTag, try pushing preprod and tag
         if (deployment.approved === true && deployment.nextTag) {
 
-            await git.createTag(repoPath, deployment.nextTag);
+            let tagResult = await git.createTag(repoPath, deployment.nextTag);
+
+            if(tagResult.error){
+                deployment.processingLogs = deployment.processingLogs || [];
+                deployment.processingLogs.push({
+                    branch: localPreprodBranch,
+                    message: tagResult.message||tagResult.error,
+                    stack: tagResult.error
+                });
+                await setDataPushUpdateIfExists('deployments', {
+                    ...deployment,
+                    deployed: false
+                }, (item) => item.id === deployment.id);
+                return
+            }
 
             await git.pushBranchAndTag(repoPath, localPreprodBranch, deployment.nextTag)
 
             deployment.processingLogs.push({
                 branch: localPreprodBranch,
-                tag: deployment.nextTag
+                message: !!deployment.nextTag ? `Tagged as ${deployment.nextTag}` : 'No tag created'
             });
             deployment.deployed = true;
             await setDataPushUpdateIfExists('deployments', {
