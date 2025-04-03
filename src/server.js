@@ -11,7 +11,7 @@ const { configureAuthRoutes, getAccessToken } = require('./auth');
 const { configureCronJobs, restartCronJobs } = require('./cron');
 const { processDeployments } = require("./gitlab");
 const { ensureDbFile, getData, setData } = require("./db");
-const { getAllChats } = require("./helpers");
+const { getAllChats, getLatestMessage } = require("./helpers");
 const basicAuthMiddleware = require("express-basic-auth");
 
 ensureDbFile().then(() => {
@@ -45,15 +45,6 @@ async function getDeployments() {
         return bDate - aDate;
     });
 }
-
-/* app.get('/', async(req, res) => {
-    try {
-        const html = await fs.readFile(path.join(process.cwd(), 'src', 'index.html'), 'utf8');
-        res.send(html);
-    } catch (e) {
-        res.status(404).send("Frontend not found. Build the Nuxt app first.");
-    }
-}) */
 
 app.use(express.static(path.join(process.cwd(), 'frontend', '.output', 'public')));
 
@@ -227,6 +218,44 @@ app.delete('/api/cron-configs/:id', async (req, res) => {
     } catch (error) {
         console.error('Error deleting cron config:', error);
         res.status(500).send('Failed to delete cron configuration.');
+    }
+});
+
+app.post('/api/cron-configs/:id/test', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const configs = await getData(CRON_CONFIG_KEY, []);
+        const config = configs.find(c => c.id === id);
+
+        if (!config) {
+            return res.status(404).send('Cron configuration not found.');
+        }
+
+        const accessToken = await getAccessToken();
+        if (!accessToken) {
+            return res.status(401).send('Authentication required. Please login.');
+        }
+
+        console.log(`Testing channel fetch for config ID: ${id}, Channel ID: ${config.channelId}`);
+        const latestMessage = await getLatestMessage(accessToken, config.channelId);
+
+        if (latestMessage) {
+            res.json({
+                message: `Latest message from "${config.channelName}"`,
+                details: latestMessage
+            });
+        } else {
+            res.json({
+                message: `No messages found in "${config.channelName}".`,
+                details: null
+            });
+        }
+    } catch (error) {
+        console.error(`Error testing cron config ${req.params.id}:`, error);
+        const statusCode = error.message.includes('Authentication') ? 401
+                         : error.message.includes('Chat not found') ? 404
+                         : 500;
+        res.status(statusCode).send(error.message || 'Failed to test channel.');
     }
 });
 

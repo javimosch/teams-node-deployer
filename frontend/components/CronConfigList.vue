@@ -1,5 +1,5 @@
 <template>
-  <div class="mt-12"> <!-- Add margin-top -->
+  <div class="mt-12">
     <h2 class="text-2xl font-semibold text-gray-800 mb-4">Channel Polling Cron Jobs</h2>
 
     <!-- Add Form -->
@@ -12,12 +12,12 @@
 
     <!-- List Header -->
     <div class="bg-white rounded-lg shadow overflow-hidden">
-       <div class="grid grid-cols-12 bg-gray-100 p-4 border-b text-sm font-medium text-gray-600 gap-4">
-         <div class="col-span-4">Channel</div>
-         <div class="col-span-3">Schedule (node-cron)</div>
-         <div class="col-span-2 text-center">Enabled</div>
-         <div class="col-span-2">Last Updated</div>
-         <div class="col-span-1"></div> <!-- Actions -->
+       <div class="grid grid-cols-12 bg-gray-100 p-4 border-b text-sm font-medium text-gray-600 gap-2 md:gap-4">
+         <div class="col-span-12 md:col-span-4">Channel</div>
+         <div class="col-span-6 md:col-span-3">Schedule (node-cron)</div>
+         <div class="col-span-3 md:col-span-1 text-center">Enabled</div>
+         <div class="col-span-6 md:col-span-2">Last Updated</div>
+         <div class="col-span-3 md:col-span-2 text-right">Actions</div>
        </div>
 
       <!-- Loading State -->
@@ -62,22 +62,20 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['error', 'success']); // For toast notifications
+const emit = defineEmits(['error', 'success']);
 
 const cronConfigs = ref([]);
 const isLoading = ref(false);
-const legacyCronInfo = ref(null); // To store info about legacy cron if active
+const legacyCronInfo = ref(null);
 
-// --- API Calls ---
 async function fetchCronConfigs() {
   isLoading.value = true;
   try {
     const data = await $fetch(`${props.apiBase}/cron-configs`);
     cronConfigs.value = data || [];
-    // Check if legacy cron might be running (heuristic: no enabled dynamic configs)
     const hasEnabledDynamicConfig = cronConfigs.value.some(c => c.enabled);
-    if (!hasEnabledDynamicConfig && !process.env.NUXT_PUBLIC_DISABLE_LEGACY_CRON) { // Add env var check if needed
-        legacyCronInfo.value = `CHAT_ID ${process.env.NUXT_PUBLIC_LEGACY_CHAT_ID || '?'}`; // Needs env var access
+    if (!hasEnabledDynamicConfig && !process.env.NUXT_PUBLIC_DISABLE_LEGACY_CRON) {
+        legacyCronInfo.value = `CHAT_ID ${process.env.NUXT_PUBLIC_LEGACY_CHAT_ID || '?'}`;
     } else {
         legacyCronInfo.value = null;
     }
@@ -91,13 +89,10 @@ async function fetchCronConfigs() {
   }
 }
 
-// --- Event Handlers ---
 function handleConfigAdded(newConfig) {
   cronConfigs.value.push(newConfig);
-  // Sort or just push? Push is simpler. Sort if order matters.
-  // cronConfigs.value.sort((a, b) => a.channelName.localeCompare(b.channelName));
   emit('success', `Cron config for "${newConfig.channelName}" added.`);
-  fetchCronConfigs(); // Refetch to update legacy status
+  fetchCronConfigs();
 }
 
 function handleConfigUpdated(updatedConfig) {
@@ -106,7 +101,7 @@ function handleConfigUpdated(updatedConfig) {
     cronConfigs.value[index] = updatedConfig;
     emit('success', `Cron config for "${updatedConfig.channelName}" updated.`);
   }
-  fetchCronConfigs(); // Refetch to update legacy status
+  fetchCronConfigs();
 }
 
 function handleConfigDeleted(deletedId) {
@@ -116,14 +111,17 @@ function handleConfigDeleted(deletedId) {
       cronConfigs.value.splice(index, 1);
       emit('success', `Cron config for "${deletedName}" deleted.`);
   }
-  fetchCronConfigs(); // Refetch to update legacy status
+  fetchCronConfigs();
 }
 
 function handleError(errorMessage) {
   emit('error', errorMessage);
 }
 
-// --- Lifecycle ---
+function handleSuccess(message, title = null) {
+    emit('success', message, title);
+}
+
 onMounted(() => {
   fetchCronConfigs();
 });

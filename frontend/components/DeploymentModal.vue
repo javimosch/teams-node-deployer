@@ -139,7 +139,7 @@ function computeStatus(dep) {
     let some = str => logs.some(log => (log.message || '').toLowerCase().includes(str));
 
     if (status === 'processed' && dep.deployed === true) return 'deployed';
-    if (deploymentHasLog(dep, ['tag', 'already']) || deploymentHasLog(dep, ['no', 'changes'])) return 'skipped';
+    if (deploymentHasLog(dep, ['tag', 'already']) || deploymentHasLog(dep, ['no', 'changes']) || deploymentHasLog(dep, ['branch', 'not', 'exist'])) return 'skipped';
     if (some('error') || some('fatal') || (dep.processingBranchErrors && dep.processingBranchErrors.length > 0)) return 'failed';
     if (status === 'processed') return 'ready';
     return status || 'pending';
@@ -182,6 +182,13 @@ const statusTitle = computed(() => {
         if (tagLog) return tagLog.message;
         const noChangesLog = deploymentLogGet(deployment.value, ['no', 'changes']);
         if (noChangesLog) return noChangesLog.message;
+
+        const branchNotFoundLog = deploymentLogGet(deployment.value, ['branch', 'not', 'exist'])
+        if (branchNotFoundLog) return branchNotFoundLog.message;
+
+        if (!deployment.value.nextTag) {
+            return 'Tag not found';
+        }
     }
     return statusInfo.value.label;
 });

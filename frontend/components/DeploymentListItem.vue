@@ -12,7 +12,8 @@
     </div>
     <div class="col-span-4 md:col-span-2 flex items-center">
       <span v-html="statusElement" :title="statusTitle"></span>
-      <font-awesome-icon v-if="hasErrors" :icon="['fas', 'exclamation-circle']" class="text-red-500 ml-2" title="Errors occurred during processing" />
+      <font-awesome-icon v-if="hasErrors" :icon="['fas', 'exclamation-circle']" class="text-red-500 ml-2"
+        title="Errors occurred during processing" />
     </div>
     <div class="col-span-2 md:col-span-2 flex items-center">
       <span v-if="deployment.nextTag" v-html="approvalElement"></span>
@@ -63,35 +64,35 @@ function stripHtml(html) {
 }
 
 function deploymentHasLog(deployment, strs) {
-    return deployment.processingLogs?.some(log => strs.every(s => (log.message || '').toLowerCase().includes(s))) ?? false;
+  return deployment.processingLogs?.some(log => strs.every(s => (log.message || '').toLowerCase().includes(s))) ?? false;
 }
 
 function deploymentLogGet(deployment, strs) {
-    return deployment.processingLogs?.find(log => strs.every(s => (log.message || '').toLowerCase().includes(s)));
+  return deployment.processingLogs?.find(log => strs.every(s => (log.message || '').toLowerCase().includes(s.toLowerCase())));
 }
 
 function computeStatus(deployment) {
-    if (!deployment) return 'pending';
+  if (!deployment) return 'pending';
 
-    const status = deployment.status;
-    const logs = deployment.processingLogs || [];
+  const status = deployment.status;
+  const logs = deployment.processingLogs || [];
 
-    let some = str => logs.some(log => (log.message || '').toLowerCase().includes(str));
+  let some = str => logs.some(log => (log.message || '').toLowerCase().includes(str));
 
-    if (status === 'processed' && deployment.deployed === true) {
-        return 'deployed';
-    }
-    if (deploymentHasLog(deployment, ['tag', 'already']) || deploymentHasLog(deployment, ['no', 'changes'])) {
-        return 'skipped';
-    }
-    if (some('error') || some('fatal') || (deployment.processingBranchErrors && deployment.processingBranchErrors.length > 0)) {
-        return 'failed';
-    }
-    if (status === 'processed') {
-        return 'ready';
-    }
-    // Handle 'processing' explicitly if needed, otherwise rely on backend status
-    return status || 'pending';
+  if (status === 'processed' && deployment.deployed === true) {
+    return 'deployed';
+  }
+  if (deploymentHasLog(deployment, ['tag', 'already']) || deploymentHasLog(deployment, ['no', 'changes']) || !deployment.nextTag) {
+    return 'skipped';
+  }
+  if (some('error') || some('fatal') || (deployment.processingBranchErrors && deployment.processingBranchErrors.length > 0)) {
+    return 'failed';
+  }
+  if (status === 'processed') {
+    return 'ready';
+  }
+  // Handle 'processing' explicitly if needed, otherwise rely on backend status
+  return status || 'pending';
 }
 
 function getStatusInfo(status) {
@@ -132,14 +133,21 @@ const statusElement = computed(() => {
 });
 
 const statusTitle = computed(() => {
-    const status = computedStatus.value;
-    if (status === 'skipped') {
-        const tagLog = deploymentLogGet(props.deployment, ['tag', 'already']);
-        if (tagLog) return tagLog.message;
-        const noChangesLog = deploymentLogGet(props.deployment, ['no', 'changes']);
-        if (noChangesLog) return noChangesLog.message;
+  const status = computedStatus.value;
+  if (status === 'skipped') {
+    const tagLog = deploymentLogGet(props.deployment, ['tag', 'already']);
+    if (tagLog) return tagLog.message;
+    const noChangesLog = deploymentLogGet(props.deployment, ['no', 'changes']);
+    if (noChangesLog) return noChangesLog.message;
+
+    const branchNotFoundLog = deploymentLogGet(props.deployment, ['branch', 'not', 'exist'])
+    if (branchNotFoundLog) return branchNotFoundLog.message;
+
+    if (!props.deployment.nextTag) {
+      return 'Tag not found';
     }
-    return statusInfo.value.label; // Default title is the status label
+  }
+  return statusInfo.value.label; // Default title is the status label
 });
 
 
@@ -162,7 +170,7 @@ const contentPreview = computed(() => {
 });
 
 const hasErrors = computed(() => {
-    return props.deployment.processingBranchErrors && props.deployment.processingBranchErrors.length > 0;
+  return props.deployment.processingBranchErrors && props.deployment.processingBranchErrors.length > 0;
 });
 
 

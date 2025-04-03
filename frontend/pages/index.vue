@@ -60,7 +60,7 @@
     <!-- Cron Configurations Section -->
     <CronConfigList
         :api-base="apiBase"
-        @success="message => showToast(message, 'success')"
+        @success="(message, title) => showToast(message, 'success', title)"
         @error="message => showToast(message, 'error')"
     />
 
@@ -163,6 +163,7 @@ function showToast(message, type = 'success', title = null) {
         console.warn('Toast container not available yet.');
         return;
     }
+    // Use provided title, or generate default based on type
     const toastTitle = title || (type === 'success' ? 'Success' : type.charAt(0).toUpperCase() + type.slice(1));
     toastContainerRef.value.addToast({ type, title: toastTitle, message });
 }

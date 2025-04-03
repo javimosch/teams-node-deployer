@@ -5,7 +5,8 @@ const { getData } = require("./db");
 module.exports = {
     getLatestMessages,
     getChatIdByTopic,
-    getAllChats
+    getAllChats,
+    getLatestMessage
 }
 
 async function getLastFiveMessagesFromMepChannelUsingStoredAccessToken() {
@@ -70,10 +71,49 @@ async function getLatestMessages(accessToken, chatId) {
     }
 }
 
+async function getLatestMessage(accessToken, chatId) {
+    const functionName = 'getLatestMessage';
+    try {
+        console.log(`${functionName}: Fetching latest message for chat ID: ${chatId}`);
+        const response = await axios.get(
+            `https://graph.microsoft.com/v1.0/chats/${chatId}/messages?$top=1`,
+            {
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    "Content-Type": "application/json",
+                },
+            }
+        );
+        const messages = response?.data?.value || [];
+        if (messages.length > 0) {
+            console.log(`${functionName}: Found latest message:`, { id: messages[0].id });
+            const msg = messages[0];
+            return {
+                id: msg.id,
+                from: msg.from?.user?.displayName || 'Unknown Sender',
+                content: msg.body?.content || "",
+                createdAt: msg.createdDateTime,
+            };
+        } else {
+            console.log(`${functionName}: No messages found in chat ID: ${chatId}`);
+            return null;
+        }
+    } catch (error) {
+        console.error(`${functionName}: Error fetching latest message for chat ID ${chatId}:`, error.response ? error.response.data : error.message);
+        if (error.response?.status === 401 || error.response?.data?.error?.code === 'InvalidAuthenticationToken') {
+            await onInvalidToken();
+            throw new Error('Authentication token invalid or expired. Please re-authenticate.');
+        } else if (error.response?.status === 404) {
+             throw new Error(`Chat not found or access denied for ID: ${chatId}`);
+        }
+        throw error;
+    }
+}
+
 async function getPersonalChatId(accessToken) {
     try {
         let allChats = [];
-        let nextLink = 'https://graph.microsoft.com/v1.0/me/chats';  // Initial request URL
+        let nextLink = 'https://graph.microsoft.com/v1.0/me/chats';
 
         while (nextLink) {
             console.log(`Fetching chats from ${nextLink}`);
