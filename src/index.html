@@ -100,28 +100,6 @@
 
         <!-- Stats Cards -->
         <div class="grid grid-cols-1 md:grid-cols-6 gap-4 mb-8">
-            <div class="bg-white rounded-lg shadow p-4 border-l-4 border-purple-500">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-sm font-medium text-gray-500">Deployed</p>
-                        <p id="deployed-count" class="text-2xl font-semibold text-gray-800">0</p>
-                    </div>
-                    <div class="bg-purple-100 p-3 rounded-full">
-                        <i class="fas fa-rocket text-purple-600"></i>
-                    </div>
-                </div>
-            </div>
-            <div class="bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-sm font-medium text-gray-500">Ready</p>
-                        <p id="ready-count" class="text-2xl font-semibold text-gray-800">0</p>
-                    </div>
-                    <div class="bg-green-100 p-3 rounded-full">
-                        <i class="fas fa-check-circle text-green-600"></i>
-                    </div>
-                </div>
-            </div>
             <div class="bg-white rounded-lg shadow p-4 border-l-4 border-blue-500">
                 <div class="flex items-center justify-between">
                     <div>
@@ -130,17 +108,6 @@
                     </div>
                     <div class="bg-blue-100 p-3 rounded-full">
                         <i class="fas fa-clock text-blue-600"></i>
-                    </div>
-                </div>
-            </div>
-             <div class="bg-white rounded-lg shadow p-4 border-l-4 border-yellow-500">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-sm font-medium text-gray-500">Processing</p>
-                        <p id="processing-count" class="text-2xl font-semibold text-gray-800">0</p>
-                    </div>
-                    <div class="bg-yellow-100 p-3 rounded-full">
-                        <i class="fas fa-spinner text-yellow-600"></i>
                     </div>
                 </div>
             </div>
@@ -163,6 +130,28 @@
                     </div>
                     <div class="bg-red-100 p-3 rounded-full">
                         <i class="fas fa-exclamation-triangle text-red-600"></i>
+                    </div>
+                </div>
+            </div>
+             <div class="bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-500">Ready</p>
+                        <p id="ready-count" class="text-2xl font-semibold text-gray-800">0</p>
+                    </div>
+                    <div class="bg-green-100 p-3 rounded-full">
+                        <i class="fas fa-check-circle text-green-600"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4 border-l-4 border-purple-500">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-500">Deployed</p>
+                        <p id="deployed-count" class="text-2xl font-semibold text-gray-800">0</p>
+                    </div>
+                    <div class="bg-purple-100 p-3 rounded-full">
+                        <i class="fas fa-rocket text-purple-600"></i>
                     </div>
                 </div>
             </div>
@@ -752,9 +741,6 @@
                     case 'pending':
                         counts.pending++;
                         break;
-                    case 'processing':
-                        counts.processing++;
-                        break;
                     case 'skipped':
                         counts.skipped++;
                         break;
@@ -767,12 +753,11 @@
                 }
             });
 
-            document.getElementById('deployed-count').textContent = counts.deployed;
-            document.getElementById('ready-count').textContent = counts.ready;
             document.getElementById('pending-count').textContent = counts.pending;
-            document.getElementById('processing-count').textContent = counts.processing;
             document.getElementById('skipped-count').textContent = counts.skipped;
             document.getElementById('failed-count').textContent = counts.failed;
+            document.getElementById('ready-count').textContent = counts.ready;
+            document.getElementById('deployed-count').textContent = counts.deployed;
             document.getElementById('canceled-count').textContent = counts.canceled;
         }
 
