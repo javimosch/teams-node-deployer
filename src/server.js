@@ -49,7 +49,7 @@ app.get('/api/deployments', async (req, res) => {
 })
 
 app.put('/api/deployments', async (req, res) => {
-    const {id, status} = req.body
+    const {id, status, approved} = req.body
     console.log('server.js updateDeployment', {id, status})
     const data = require(path.join(process.cwd(), 'data.json'))
     const deployment = data.deployments.find(d => d.id === id)
@@ -64,24 +64,27 @@ app.put('/api/deployments', async (req, res) => {
 
     // Only allow setting status to pending if deployment is processed and not approved
     if (status === 'pending' && (deployment.status !== 'processed' )) {
-        return res.status(400).send('Can only mark as pending processed and non-approved deployments')
+        return res.status(400).send('Can only mark as pending processed (found '+deployment.status+')')
     }
     
-    deployment.status = status
+    if(!!status){
+        deployment.status = status
+    }
 
-    console.log('server.js updateDeployment', {id, status, deployment})
 
     //UI sends processing when the user clicks "Approve" action
-    if(status==='processing'){
+    if(approved===true){
         deployment.approved = true
     }
+
+    console.log('server.js updateDeployment', {id, status, approved, deployment})
 
     deployment.updatedAt = new Date().toISOString()
     await fs.writeFile(path.join(process.cwd(), 'data.json'), JSON.stringify(data, null, 2))
 
     setTimeout(()=> processDeployments(), 1000)
 
-    res.send('Deployment updated')
+    res.json(deployment)
 })
 
 app.post('/api/deployments/:id/cancel', async (req, res) => {

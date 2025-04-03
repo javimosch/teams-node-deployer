@@ -23,7 +23,7 @@ async function processDeployments() {
             for (const deployment of deployments) {
                 console.log('Processing deployment:', deployment);
                 await setDataPushUpdateIfExists('deployments', {
-                    status: 'in_progress'
+                    status: 'processing'
                 }, (item) => item.id === deployment.id);
                 const repoPath = await cloneRepo();
                 await deployTicket(deployment, repoPath);
@@ -43,6 +43,12 @@ async function processDeployments() {
         });
     } finally {
         processing = false;
+
+        const deployments = await getData('deployments', []);
+        deployments.forEach(deployment => {
+            deployment.status = 'processed';
+        });
+        await setData('deployments', deployments);
     }
 }
 
