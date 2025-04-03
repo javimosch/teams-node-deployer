@@ -1,7 +1,6 @@
 version: "3.8"
 services:
   app:
-    build: .
     image: javimosch/teams-node-deployer:latest
     expose:
       - "3000"
