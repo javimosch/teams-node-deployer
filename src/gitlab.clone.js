@@ -116,6 +116,7 @@ async function cloneRepo() {
 
             gitProcess.on('close', (code) => {
                 if (code === 0) {
+                    console.log(`src/gitlab.js ${functionName} Git clone completed successfully`);
                     resolve();
                 } else {
                     reject(new Error(`Git clone failed with code ${code}\nStdout: ${stdoutData}\nStderr: ${stderrData}`));
