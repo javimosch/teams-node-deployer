@@ -1,5 +1,5 @@
 <template>
-  <div class="container mx-auto px-4 py-8">
+  <div class="container mx-auto px-4 py-8 mb-20">
     <!-- Header -->
     <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
       <div>
@@ -30,7 +30,7 @@
     <StatsGrid :stats="deploymentStats" />
 
     <!-- Deployments List -->
-    <div class="bg-white rounded-lg shadow overflow-hidden">
+    <div class="bg-white rounded-lg shadow overflow-hidden mb-12">
       <!-- Table Header -->
       <div class="grid grid-cols-12 bg-gray-100 p-4 border-b text-sm font-medium text-gray-600">
         <div class="col-span-4 md:col-span-5">Request Details</div>
@@ -56,6 +56,13 @@
         </div>
       </div>
     </div>
+
+    <!-- Cron Configurations Section -->
+    <CronConfigList
+        :api-base="apiBase"
+        @success="message => showToast(message, 'success')"
+        @error="message => showToast(message, 'error')"
+    />
 
     <!-- Deployment Details Modal -->
     <DeploymentModal
@@ -90,6 +97,7 @@ import StatsGrid from '~/components/StatsGrid.vue';
 import DeploymentListItem from '~/components/DeploymentListItem.vue';
 import DeploymentModal from '~/components/DeploymentModal.vue';
 import ToastContainer from '~/components/ToastContainer.vue';
+import CronConfigList from '~/components/CronConfigList.vue';
 
 // Get runtime config
 const config = useRuntimeConfig();
@@ -155,7 +163,7 @@ function showToast(message, type = 'success', title = null) {
         console.warn('Toast container not available yet.');
         return;
     }
-    const toastTitle = title || (type === 'success' ? 'Success' : 'Error');
+    const toastTitle = title || (type === 'success' ? 'Success' : type.charAt(0).toUpperCase() + type.slice(1));
     toastContainerRef.value.addToast({ type, title: toastTitle, message });
 }
 

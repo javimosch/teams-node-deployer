@@ -1,4 +1,4 @@
-const { getData, setData, setDataPushIfNotExists, pruneDupes, persistAccessToken, persistRefreshToken } = require("./db");
+const { getData, persistAccessToken, persistRefreshToken } = require("./db");
 const qs = require("querystring");
 const PORT = process.env.PORT || 3000;
 const axios = require("axios");
@@ -6,10 +6,11 @@ const axios = require("axios");
 // Microsoft OAuth Config
 const CLIENT_ID = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
-const REDIRECT_URI = process.env.REDIRECT_URI|| `http://localhost:${PORT}/auth/callback`;
+const REDIRECT_URI = process.env.REDIRECT_URI || `http://localhost:${PORT}/auth/callback`;
 const TENANT_ID = process.env.TENANT_ID;
 const AUTH_URL = `https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/authorize`;
 const TOKEN_URL = `https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token`;
+const REQUIRED_SCOPES = "offline_access https://graph.microsoft.com/Chat.Read Chat.ReadBasic Chat.ReadWrite";
 
 function configureAuthRoutes(app) {
     // Step 1: Redirect User to Microsoft Login
@@ -19,7 +20,7 @@ function configureAuthRoutes(app) {
             response_type: "code",
             redirect_uri: REDIRECT_URI,
             response_mode: "query",
-            scope: "offline_access https://graph.microsoft.com/Chat.Read",
+            scope: REQUIRED_SCOPES,
         });
 
         res.redirect(`${AUTH_URL}?${params}`);
@@ -64,7 +65,7 @@ function configureAuthRoutes(app) {
                     grant_type: "authorization_code",
                     code,
                     redirect_uri: REDIRECT_URI,
-                    scope: "https://graph.microsoft.com/Chat.Read",
+                    scope: REQUIRED_SCOPES,
                 }),
                 { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
             );
@@ -83,79 +84,97 @@ function configureAuthRoutes(app) {
                 data: response.data
             });
 
-            //res.send(`Access Token: ${access_token}`);
             res.redirect('/');
         } catch (error) {
-            console.error("OAuth error:", error.response.data);
+            console.error("OAuth error:", error.response ? error.response.data : error.message);
             res.status(500).send("Authentication failed");
         }
     });
-
-
-    
-
 }
 
 async function onInvalidToken() {
-    console.log("WARN: Invalid token, user should re-authenticate")
-    let accessToken = await getData('accessToken');
-    let refreshToken = await getData('refreshToken');
-    if (accessToken && refreshToken) {
-        await refreshTokenIfAboutToExpire(accessToken, refreshToken);
+    console.warn("Invalid token detected. Attempting refresh or requiring re-login.");
+    // Clear potentially invalid tokens
+    // await setData('accessToken', null);
+    // Consider clearing refresh token too if refresh fails repeatedly
+    // await setData('refreshToken', null);
+
+    // Attempt refresh silently first
+    const refreshed = await refreshTokenIfAboutToExpire(await getData('accessToken'), await getData('refreshToken'), true);
+    if (!refreshed) {
+        console.error("Token refresh failed or not possible. User re-authentication required.");
+        // Optionally, implement a mechanism to notify the frontend/user
     }
 }
 
-module.exports = {
-    refreshTokenIfAboutToExpire,
-    onInvalidToken,
-    configureAuthRoutes
-}
-
-async function refreshTokenIfAboutToExpire(accessToken, refreshToken) {
+async function refreshTokenIfAboutToExpire(accessToken, refreshToken, force = false) {
     try {
-
-        if(!accessToken || !refreshToken) {
-            console.log("WARN: No access token or refresh token found, user should re-authenticate");
-            return;
-        }else{
-            console.log("INFO: Access token or refresh token found, refreshing...");
+        if (!accessToken || !refreshToken) {
+            console.warn("No access token or refresh token found for refresh attempt.");
+            return null;
         }
 
-        // Decode the access token to get the expiration time
-        const decodedToken = JSON.parse(Buffer.from(accessToken.split('.')[1], 'base64').toString());
-        const expirationTime = decodedToken.exp * 1000;  // Convert to milliseconds
-        const currentTime = Date.now();
+        let needsRefresh = force;
+        if (!force) {
+            // Decode the access token to get the expiration time
+            const decodedToken = JSON.parse(Buffer.from(accessToken.split('.')[1], 'base64').toString());
+            const expirationTime = decodedToken.exp * 1000; // Convert to milliseconds
+            const currentTime = Date.now();
+            const bufferTime = 5 * 60 * 1000; // Refresh if within 5 minutes of expiry
 
-        // If the token will expire in less than an 30min, refresh it
-        if (expirationTime - currentTime < 30 * 60 * 1000) {
-            console.log('Access token is about to expire, refreshing...');
+            needsRefresh = (expirationTime - currentTime < bufferTime);
+        }
 
-            const response = await axios.post(`https://login.microsoftonline.com/${process.env.TENANT_ID}/oauth2/v2.0/token`, {
-                client_id: process.env.CLIENT_ID,
-                client_secret: process.env.CLIENT_SECRET,
-                refresh_token: refreshToken,
-                grant_type: 'refresh_token',
-                scope: 'offline_access https://graph.microsoft.com/.default',
-            }, {
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded', // Ensure the body is encoded as x-www-form-urlencoded
-                }
-            });
+        if (needsRefresh) {
+            console.log(`Refreshing access token (Forced: ${force})...`);
+
+            const response = await axios.post(TOKEN_URL,
+                qs.stringify({
+                    client_id: process.env.CLIENT_ID,
+                    client_secret: process.env.CLIENT_SECRET,
+                    refresh_token: refreshToken,
+                    grant_type: 'refresh_token',
+                    scope: REQUIRED_SCOPES,
+                }), {
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    }
+                });
 
             const newAccessToken = response.data.access_token;
-            const newRefreshToken = response.data.refresh_token; // May be returned
+            const newRefreshToken = response.data.refresh_token || refreshToken;
 
-            console.log('New access token:', newAccessToken.slice(0, 10));
+            console.log('Token refreshed successfully.');
             await persistAccessToken(newAccessToken);
             await persistRefreshToken(newRefreshToken);
 
-            return { newAccessToken, newRefreshToken };
+            return { accessToken: newAccessToken, refreshToken: newRefreshToken };
         } else {
-            console.log('Access token is still valid.');
-            return { accessToken, refreshToken }; // No need to refresh
+            console.log('Access token is still valid, no refresh needed.');
+            return { accessToken, refreshToken };
         }
     } catch (error) {
         console.error('Error refreshing token:', error.response ? error.response.data : error.message);
         return null;
     }
+}
+
+async function getAccessToken() {
+    let accessToken = await getData('accessToken');
+    let refreshToken = await getData('refreshToken');
+
+    if (!accessToken || !refreshToken) {
+        return null;
+    }
+
+    const refreshedTokens = await refreshTokenIfAboutToExpire(accessToken, refreshToken);
+
+    return refreshedTokens ? refreshedTokens.accessToken : null;
+}
+
+module.exports = {
+    refreshTokenIfAboutToExpire,
+    onInvalidToken,
+    configureAuthRoutes,
+    getAccessToken
 }

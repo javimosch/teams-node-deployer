@@ -1,17 +1,16 @@
-
 const axios = require("axios");
 const { onInvalidToken } = require("./auth");
+const { getData } = require("./db");
 
 module.exports = {
-    getLatestMessages
+    getLatestMessages,
+    getChatIdByTopic,
+    getAllChats
 }
 
 async function getLastFiveMessagesFromMepChannelUsingStoredAccessToken() {
     const accessToken = await getData('accessToken');
     if (accessToken) {
-
-
-
         let chatId = await getChatIdByTopic(accessToken, 'MEP');
         console.log(`Chat ID: ${chatId}`);
 
@@ -26,10 +25,8 @@ async function getLastFiveMessagesFromMepChannelUsingStoredAccessToken() {
     }
 }
 
-
 async function getChatIdByTopic(accessToken, topicStartWith) {
     try {
-        // Fetch all chats the user is a part of
         const response = await axios.get('https://graph.microsoft.com/v1.0/me/chats', {
             headers: {
                 Authorization: `Bearer ${accessToken}`,
@@ -37,11 +34,10 @@ async function getChatIdByTopic(accessToken, topicStartWith) {
             }
         });
 
-        // Filter chats by topic starting with the given string
         const chat = response.data.value.find(chat => chat.topic && chat.topic.startsWith(topicStartWith));
 
         if (chat) {
-            return chat.id; // Return the chat ID
+            return chat.id;
         } else {
             console.log(`No chat found with topic starting with '${topicStartWith}'`);
             return null;
@@ -71,17 +67,14 @@ async function getLatestMessages(accessToken, chatId) {
             onInvalidToken()
             return
         }
-
     }
 }
-
 
 async function getPersonalChatId(accessToken) {
     try {
         let allChats = [];
         let nextLink = 'https://graph.microsoft.com/v1.0/me/chats';  // Initial request URL
 
-        // Loop through pages
         while (nextLink) {
             console.log(`Fetching chats from ${nextLink}`);
             const response = await axios.get(nextLink, {
@@ -91,20 +84,16 @@ async function getPersonalChatId(accessToken) {
                 }
             });
 
-            // Collect chats
             allChats = allChats.concat(response.data.value);
 
-            // Check if there's a next page
             nextLink = response.data['@odata.nextLink'] || null;
         }
 
-        // Filter the personal chats (1:1) and match year to 2025
         const targetYear = 2025;
         const personalChats = allChats
             .filter(chat => {
                 if (chat.chatType === "oneOnOne") {
                     const updatedDate = new Date(chat.lastUpdatedDateTime);
-                    // Match the year, ignoring month and day
                     return updatedDate.getFullYear() === targetYear;
                 }
                 return false;
@@ -120,12 +109,10 @@ async function getPersonalChatId(accessToken) {
 
         process.exit(0)
 
-        // Return the latest 1:1 chat ID if found
         if (personalChats.length > 0) {
             const chatId = personalChats[0].id;
             console.log(`Personal chat ID: ${chatId}`);
 
-            // Fetch the latest messages from the personal chat
             await getMessagesFromChat(chatId, accessToken);
 
             return chatId;
@@ -133,9 +120,58 @@ async function getPersonalChatId(accessToken) {
             console.log('No personal chat found on March 27, 2025');
             return null;
         }
-
     } catch (error) {
         console.error('Error fetching chats:', error.response ? error.response.data : error.message);
         return null;
+    }
+}
+
+async function getAllChats(accessToken) {
+    const functionName = 'getAllChats';
+    try {
+        let allChats = [];
+        let nextLink = 'https://graph.microsoft.com/v1.0/me/chats?$select=id,topic,chatType,createdDateTime,lastUpdatedDateTime';
+
+        console.log(`${functionName}: Fetching chats...`);
+
+        while (nextLink) {
+            const response = await axios.get(nextLink, {
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json',
+                }
+            });
+
+            allChats = allChats.concat(response.data.value);
+
+            nextLink = response.data['@odata.nextLink'] || null;
+            if (nextLink) {
+                console.log(`${functionName}: Fetching next page: ${nextLink.substring(0, 100)}...`);
+            }
+        }
+
+        console.log(`${functionName}: Fetched total chats:`, allChats.length);
+
+        allChats.sort((a, b) => {
+            const topicA = a.topic || '';
+            const topicB = b.topic || '';
+            if (topicA.toLowerCase() < topicB.toLowerCase()) return -1;
+            if (topicA.toLowerCase() > topicB.toLowerCase()) return 1;
+            return new Date(b.lastUpdatedDateTime) - new Date(a.lastUpdatedDateTime);
+        });
+
+        return allChats.map(chat => ({
+            id: chat.id,
+            topic: chat.topic || `Chat (${chat.chatType})`,
+            type: chat.chatType,
+            lastUpdated: chat.lastUpdatedDateTime
+        }));
+    } catch (error) {
+        console.error(`${functionName}: Error fetching chats:`, error.response ? error.response.data : error.message);
+        if (error.response?.status === 401 || error.response?.data?.error?.code === 'InvalidAuthenticationToken') {
+            await onInvalidToken();
+            throw new Error('Authentication token invalid or expired. Please re-authenticate.');
+        }
+        throw error;
     }
 }
