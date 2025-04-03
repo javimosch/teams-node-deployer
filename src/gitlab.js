@@ -12,13 +12,14 @@ async function processDeployments() {
     if (processing) return;
     processing = true;
     try {
-        let deployments = await getData('deployments');
+        let deployments = await getData('deployments', [])
 
-        deployments = deployments||[]
-        .filter(dpl=>dpl.status !== 'canceled')
-        .filter(deployment => deployment.status !== 'processed' || (deployment.approved === 'true' && deployment.status === 'processed' && !!deployment.nextTag && deployment.deployed !== true))
+        deployments = deployments
+            .filter(dpl => dpl.status !== 'canceled')
+            .filter(deployment => deployment.status !== 'processed' || (deployment.approved && deployment.status === 'processed' && !!deployment.nextTag && deployment.deployed !== true))
 
         if (deployments.length > 0) {
+
             for (const deployment of deployments) {
                 console.log('Processing deployment:', deployment);
                 await setDataPushUpdateIfExists('deployments', {
@@ -69,7 +70,7 @@ async function deployTicket(deployment, repoPath) {
 
         // 2.1 Checkout preprod-branch and reset
         await git.checkoutBranch(repoPath, localPreprodBranch);
-        
+
         await git.resetHard(repoPath, PREPROD_BRANCH);
 
 
@@ -81,7 +82,7 @@ async function deployTicket(deployment, repoPath) {
 
                 deployment.processingLogs = deployment.processingLogs || [];
 
-                if (deployment.blacklistedBranches||[].some(blacklisted => branch.includes(blacklisted))) {
+                if (deployment.blacklistedBranches || [].some(blacklisted => branch.includes(blacklisted))) {
                     console.log(`src/gitlab.js ${functionName} Skipping blacklisted branch`, { branch });
                     deployment.processingLogs.push({
                         branch,
@@ -120,13 +121,13 @@ async function deployTicket(deployment, repoPath) {
                     });
                     continue;
                 }
-                
+
 
                 // 2.3 Pull branch with conflict handling
                 console.log(`src/gitlab.js ${functionName} Pulling branch`, { branch });
                 const pullResult = await git.pullBranch(repoPath, branch);
 
-                
+
 
                 if (!pullResult.success) {
                     if (pullResult.error.includes('CONFLICT')) {
@@ -154,7 +155,7 @@ async function deployTicket(deployment, repoPath) {
                     });
                 }
 
-                
+
 
                 // Dedupe logs
                 deployment.processingLogs = deployment.processingLogs.filter((log, index) => {
@@ -193,7 +194,7 @@ async function deployTicket(deployment, repoPath) {
         if (deployment.approved === true && deployment.nextTag) {
 
             await git.createTag(repoPath, deployment.nextTag);
-            
+
             await git.pushBranchAndTag(repoPath, localPreprodBranch, deployment.nextTag)
 
             deployment.processingLogs.push({

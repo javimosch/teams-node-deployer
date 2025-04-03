@@ -17,7 +17,7 @@ async function getLastFiveMessagesFromMepChannelUsingStoredAccessToken() {
 
         let messages = await getLatestMessages(accessToken, chatId);
         console.log(`Fetched messages`, {
-            messages: messages.map(message => ({
+            messages: messages||[].map(message => ({
                 from: message.from.user.displayName,
                 content: message.body.content,
                 createdAt: message.createdDateTime
@@ -63,7 +63,7 @@ async function getLatestMessages(accessToken, chatId) {
                 },
             }
         );
-        return response.data.value;
+        return response?.data?.value||[];
     } catch (error) {
         console.error('Error fetching messages:', error.response ? error.response.data : error.message);
 

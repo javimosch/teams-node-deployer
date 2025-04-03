@@ -35,7 +35,7 @@ window.deployments = ${JSON.stringify(data.deployments)}
 app.get('/api/deployments', async (req, res) => {
     //read file instead of cache
     const data = JSON.parse(await fs.readFile(path.join(process.cwd(), 'data.json'), 'utf8'))
-    res.send(data.deployments.sort((a, b) => {
+    res.send(data.deployments || [] .sort((a, b) => {
         const aDate = a.updatedAt || a.createdAt
         const bDate = b.updatedAt || b.createdAt
         return new Date(bDate) - new Date(aDate)

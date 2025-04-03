@@ -14,13 +14,18 @@ RUN bun install --frozen-lockfile || (echo "Lockfile mismatch detected. Regenera
 COPY src ./src
 
 # Build the server
-RUN bun build ./src/server.js --outfile=dist/server.mjs --minify --target node
+RUN bun build ./src/server.js --outfile=dist/server.mjs --target node
 
 FROM oven/bun:alpine
+
+# Install git
+RUN apk add --no-cache git
+
 WORKDIR /usr/src/app
 
 # Copy the built application
 COPY --from=builder /build-stage/dist ./dist
+COPY --from=builder /build-stage/src/index.html ./src/index.html
 
 # Set the entrypoint
 CMD ["bun", "dist/server.mjs"]

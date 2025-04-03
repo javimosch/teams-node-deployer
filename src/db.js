@@ -20,10 +20,10 @@ async function persistRefreshToken(refreshToken) {
     await setData('refreshToken', refreshToken);
 }
 
-async function getData(key) {
+async function getData(key, defaultValue = null) {
     try {
         const data = JSON.parse(await fs.promises.readFile('data.json', 'utf8'));
-        return data[key];
+        return data[key] || defaultValue;
     } catch (error) {
         console.error(`Error getting ${key}:`, error);
         return null;

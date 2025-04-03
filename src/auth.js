@@ -6,7 +6,7 @@ const axios = require("axios");
 // Microsoft OAuth Config
 const CLIENT_ID = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
-const REDIRECT_URI = `http://localhost:${PORT}/auth/callback`;
+const REDIRECT_URI = process.env.REDIRECT_URI|| `http://localhost:${PORT}/auth/callback`;
 const TENANT_ID = process.env.TENANT_ID;
 const AUTH_URL = `https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/authorize`;
 const TOKEN_URL = `https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token`;
@@ -69,17 +69,22 @@ function configureAuthRoutes(app) {
                 { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
             );
 
+            console.log(`auth callback response:`, {
+                data: response.data
+            });
+
             const { access_token } = response.data;
             const { refresh_token } = response.data;
 
-            persistAccessToken(access_token);
-            persistRefreshToken(refresh_token);
+            await persistAccessToken(access_token);
+            await persistRefreshToken(refresh_token);
 
             console.log(`auth callback raw response:`, {
                 data: response.data
             });
 
-            res.send(`Access Token: ${access_token}`);
+            //res.send(`Access Token: ${access_token}`);
+            res.redirect('/');
         } catch (error) {
             console.error("OAuth error:", error.response.data);
             res.status(500).send("Authentication failed");
