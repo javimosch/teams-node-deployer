@@ -10,7 +10,7 @@ const { configureAuthRoutes} = require('./auth')
 const {configureCronJobs} = require('./cron')
 const {processDeployments} = require("./gitlab");
 const {ensureDbFile} = require("./db");
-const {basicAuthMiddleware} = require("express-basic-auth");
+const basicAuthMiddleware = require("express-basic-auth");
 
 // /login /logout /auth/callback
 configureAuthRoutes(app)

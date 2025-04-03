@@ -1,0 +1,17 @@
+version: "3.8"
+services:
+  app:
+    build: .
+    image: javimosch/teams-node-deployer:latest
+    expose:
+      - "3000"
+    volumes:
+      - data-json:/usr/src/app/tmp/data.json  # Named volume targeting a file
+      - tmp:/usr/src/app/tmp                  # Named volume for directory
+volumes:
+  data-json:                                 # Named volume for the file
+    driver: local
+    name: teams-node-deployer-data-json
+  tmp:                                      # Named volume for the directory
+    driver: local
+    name: teams-node-deployer-tmp
