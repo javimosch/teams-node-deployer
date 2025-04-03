@@ -10,9 +10,18 @@ const { configureAuthRoutes} = require('./auth')
 const {configureCronJobs} = require('./cron')
 const {processDeployments} = require("./gitlab");
 const {ensureDbFile} = require("./db");
+const {basicAuthMiddleware} = require("express-basic-auth");
 
 // /login /logout /auth/callback
 configureAuthRoutes(app)
+
+if(process.env.BASIC_AUTH_USERNAME && process.env.BASIC_AUTH_PASSWORD) {
+    app.use(basicAuthMiddleware({
+        users: {
+            [process.env.BASIC_AUTH_USERNAME]: process.env.BASIC_AUTH_PASSWORD
+        }
+    }));
+}
 
 // fetch messages and process deployments 
 ensureDbFile().then(() => {
