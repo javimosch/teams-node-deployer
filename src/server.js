@@ -21,27 +21,25 @@ ensureDbFile().then(() => {
 
 app.use(express.json());
 
-app.get('/', async(req, res) => {
-    //read file
-    const html = await fs.readFile(path.join(process.cwd(), 'src', 'index.html'), 'utf8');
-    //replace with __INJECT_DEPLOYMENTS_FROM_SERVER_HERE__ from data from ./data.json
-    
-    const data = JSON.parse(await fs.readFile(path.join(process.cwd(), 'data.json'), 'utf8'))
+async function getDeployments() {
+    const data = JSON.parse(await fs.readFile(path.join(process.cwd(), 'data.json'), 'utf8'));
+    return (data.deployments || []).sort((a, b) => {
+        const aDate = new Date(a.updatedAt ?? a.createdAt).getTime();
+        const bDate = new Date(b.updatedAt ?? b.createdAt).getTime();
+        return bDate - aDate; // This gives descending order (newest first)
+    });
+}
 
+app.get('/', async(req, res) => {
+    const html = await fs.readFile(path.join(process.cwd(), 'src', 'index.html'), 'utf8');
     const newHtml = html.replace('//__INJECT_DEPLOYMENTS_FROM_SERVER_HERE__', `
-window.deployments = ${JSON.stringify(data.deployments)}
+window.deployments = ${JSON.stringify(await getDeployments())}
         `)
     res.send(newHtml)
 })
 
 app.get('/api/deployments', async (req, res) => {
-    //read file instead of cache
-    const data = JSON.parse(await fs.readFile(path.join(process.cwd(), 'data.json'), 'utf8'))
-    res.send(data.deployments || [] .sort((a, b) => {
-        const aDate = a.updatedAt || a.createdAt
-        const bDate = b.updatedAt || b.createdAt
-        return new Date(bDate) - new Date(aDate)
-    }))
+    res.send(await getDeployments())
 })
 
 app.put('/api/deployments', async (req, res) => {
@@ -98,6 +96,19 @@ app.post('/api/deployments/:id/cancel', async (req, res) => {
     await fs.writeFile(path.join(process.cwd(), 'data.json'), JSON.stringify(data, null, 2))
     res.send('Deployment canceled')
 })
+
+// New endpoint to trigger deployment processing
+app.post('/api/deployments/process', async (req, res) => {
+    console.log('server.js POST /api/deployments/process received');
+    try {
+        // Call processDeployments asynchronously, don't wait for it to finish
+        processDeployments(); 
+        res.status(202).send('Deployment processing initiated');
+    } catch (error) {
+        console.error('Error initiating deployment processing:', error);
+        res.status(500).send('Failed to initiate deployment processing');
+    }
+});
 
 app.listen(PORT, () => {
     console.log(`Server running at http://localhost:${PORT}`);

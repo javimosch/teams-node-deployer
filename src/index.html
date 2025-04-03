@@ -198,6 +198,21 @@
                 </div>
             </div>
         </div>
+
+        <!-- Footer Toolbar -->
+        <footer class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-md p-4 z-40">
+            <div class="container mx-auto flex justify-end">
+                <button id="process-deployments-btn"
+                    class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2">
+                    <i class="fas fa-cogs"></i> Process Deployments
+                </button>
+            </div>
+        </footer>
+
+        <!-- Toast Notification Container -->
+        <div id="toast-container" class="fixed bottom-4 left-4 z-50 space-y-2">
+            <!-- Toasts will be added here -->
+        </div>
     </div>
 
     <script>
@@ -213,6 +228,8 @@
         const currentDeploymentId = document.getElementById('current-deployment-id');
         const searchInput = document.getElementById('search-input');
         const refreshBtn = document.querySelector('button:has(i.fa-sync-alt)');
+        const processDeploymentsBtn = document.getElementById('process-deployments-btn');
+        const toastContainer = document.getElementById('toast-container');
 
         // Initialize deployments data
         window.deployments = [];
@@ -255,6 +272,37 @@
                 refreshBtn.classList.remove('animate-spin');
             });
         });
+
+        // Footer button functionality
+        processDeploymentsBtn.addEventListener('click', async () => {
+            processDeploymentsBtn.disabled = true;
+            processDeploymentsBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Processing...';
+
+            try {
+                const response = await fetch('/api/deployments/process', {
+                    method: 'POST'
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || 'Failed to start processing');
+                }
+
+                showToast('Deployment processing started successfully.', 'success'); // Use toast
+                // Optionally refresh the list after a delay
+                setTimeout(fetchDeployments, 3000);
+
+            } catch (err) {
+                console.error('Error processing deployments:', err);
+                showToast('Error starting deployment processing: ' + err.message, 'error'); // Use toast
+            } finally {
+                processDeploymentsBtn.disabled = false;
+                processDeploymentsBtn.innerHTML = '<i class="fas fa-cogs mr-2"></i> Process Deployments';
+            }
+        });
+
+        // Adjust main content padding to avoid overlap with footer
+        document.querySelector('.container').style.paddingBottom = '80px'; // Adjust value as needed
 
         // Format date to readable string
         function formatDate(dateString) {
@@ -649,6 +697,28 @@
                 detailsModal.classList.add('hidden');
             }
         });
+
+        // Toast Notification Function
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = `px-4 py-3 rounded shadow-md text-white transition-opacity duration-300 ease-in-out ${type === 'success' ? 'bg-green-500' : 'bg-red-500'}`;
+            toast.textContent = message;
+
+            toastContainer.appendChild(toast);
+
+            // Trigger fade in
+            requestAnimationFrame(() => {
+                toast.style.opacity = '1';
+            });
+
+            // Auto-dismiss after 3 seconds
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => {
+                    toast.remove();
+                }, 300); // Wait for fade out transition
+            }, 3000);
+        }
     </script>
 </body>
 
