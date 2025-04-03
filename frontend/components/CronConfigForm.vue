@@ -47,6 +47,20 @@
        Selected: <span class="font-medium">{{ selectedChannel.topic }}</span> (ID: {{ selectedChannel.id }})
      </div>
 
+    <!-- Message Pattern Input -->
+    <div>
+      <label for="message-pattern" class="block text-sm font-medium text-gray-700">Trigger Words (comma-separated)</label>
+      <input
+        id="message-pattern"
+        type="text"
+        v-model="newMessagePattern"
+        :disabled="isSubmitting"
+        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm disabled:bg-gray-100"
+        placeholder="e.g., deploy, release, go (leave empty for default)"
+      />
+       <p class="mt-1 text-xs text-gray-500">Keywords the bot looks for (case-insensitive). Uses default if empty.</p>
+    </div>
+
     <!-- Schedule Input -->
     <div>
       <label for="cron-schedule" class="block text-sm font-medium text-gray-700">Cron Schedule</label>
@@ -94,6 +108,7 @@ const allChannels = ref([]); // Cache fetched channels
 const filteredChannels = ref([]);
 const selectedChannel = ref(null);
 const newSchedule = ref('*/60 * * * * *'); // Default schedule
+const newMessagePattern = ref(''); // Default empty pattern
 const isSubmitting = ref(false);
 const isLoadingChannels = ref(false);
 const showSuggestions = ref(false);
@@ -171,6 +186,7 @@ async function addConfig() {
       channelId: selectedChannel.value.id,
       channelName: selectedChannel.value.topic,
       schedule: newSchedule.value.trim(),
+      messagePattern: newMessagePattern.value.trim() || null, // Send null if empty to use backend default
     };
     const newConfig = await $fetch(`${props.apiBase}/cron-configs`, {
       method: 'POST',
@@ -182,6 +198,7 @@ async function addConfig() {
     channelSearchTerm.value = '';
     selectedChannel.value = null;
     newSchedule.value = '*/60 * * * * *'; // Reset to default
+    newMessagePattern.value = ''; // Reset pattern
     filteredChannels.value = [];
 
   } catch (err) {

@@ -13,11 +13,12 @@
     <!-- List Header -->
     <div class="bg-white rounded-lg shadow overflow-hidden">
        <div class="grid grid-cols-12 bg-gray-100 p-4 border-b text-sm font-medium text-gray-600 gap-2 md:gap-4">
-         <div class="col-span-12 md:col-span-4">Channel</div>
-         <div class="col-span-6 md:col-span-3">Schedule (node-cron)</div>
-         <div class="col-span-3 md:col-span-1 text-center">Enabled</div>
-         <div class="col-span-6 md:col-span-2">Last Updated</div>
-         <div class="col-span-3 md:col-span-2 text-right">Actions</div>
+         <div class="col-span-12 md:col-span-3">Channel</div>
+         <div class="col-span-6 md:col-span-2">Schedule</div>
+         <div class="col-span-6 md:col-span-2">Trigger Word</div>
+         <div class="col-span-2 md:col-span-1 text-center">Enabled</div>
+         <div class="col-span-5 md:col-span-2">Last Updated</div>
+         <div class="col-span-5 md:col-span-2 text-right">Actions</div>
        </div>
 
       <!-- Loading State -->

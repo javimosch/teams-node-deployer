@@ -1,13 +1,13 @@
 <template>
   <div class="grid grid-cols-12 items-center p-4 border-b gap-2 md:gap-4">
     <!-- Channel Name -->
-    <div class="col-span-12 md:col-span-4 flex items-center gap-2">
+    <div class="col-span-12 md:col-span-3 flex items-center gap-2">
       <font-awesome-icon :icon="['fas', 'hashtag']" class="text-gray-400" />
       <span class="font-medium text-gray-800 truncate" :title="config.channelName">{{ config.channelName }}</span>
     </div>
 
     <!-- Schedule -->
-    <div class="col-span-6 md:col-span-3">
+    <div class="col-span-6 md:col-span-2">
       <input
         type="text"
         v-model="editableSchedule"
@@ -18,8 +18,20 @@
       />
     </div>
 
+    <!-- Message Pattern -->
+    <div class="col-span-6 md:col-span-2">
+      <input
+        type="text"
+        v-model="editableMessagePattern"
+        @blur="updateMessagePattern"
+        :disabled="isUpdating || isTesting"
+        class="w-full px-2 py-1 border border-gray-300 rounded-md text-sm focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100"
+        placeholder="Default (e.g., deploy, release)"
+      />
+    </div>
+
     <!-- Enabled Toggle -->
-    <div class="col-span-3 md:col-span-1 flex justify-center">
+    <div class="col-span-2 md:col-span-1 flex justify-center">
       <button
         @click="toggleEnabled"
         :disabled="isUpdating || isTesting"
@@ -40,12 +52,12 @@
     </div>
 
     <!-- Last Updated / Created -->
-    <div class="col-span-6 md:col-span-2 text-sm text-gray-500 truncate">
+    <div class="col-span-5 md:col-span-2 text-sm text-gray-500 truncate">
       {{ formatDate(config.updatedAt || config.createdAt) }}
     </div>
 
     <!-- Actions -->
-    <div class="col-span-3 md:col-span-2 flex justify-end items-center space-x-3">
+    <div class="col-span-5 md:col-span-2 flex justify-end items-center space-x-3">
       <button
         @click="testChannel"
         :disabled="isUpdating || isTesting"
@@ -85,6 +97,7 @@ const emit = defineEmits(['update', 'delete', 'error', 'success']);
 const isUpdating = ref(false);
 const isTesting = ref(false);
 const editableSchedule = ref(props.config.schedule);
+const editableMessagePattern = ref(props.config.messagePattern || '');
 
 function formatDate(dateString) {
   if (!dateString) return 'N/A';
@@ -108,6 +121,7 @@ async function updateConfig(payload) {
     emit('error', `Failed to update config: ${err.data?.message || err.message}`);
     if ('enabled' in payload) props.config.enabled = !payload.enabled;
     if ('schedule' in payload) editableSchedule.value = props.config.schedule;
+    if ('messagePattern' in payload) editableMessagePattern.value = props.config.messagePattern || '';
   } finally {
     isUpdating.value = false;
   }
@@ -163,6 +177,13 @@ function updateSchedule() {
   const newSchedule = editableSchedule.value.trim();
   if (newSchedule !== props.config.schedule) {
     updateConfig({ schedule: newSchedule });
+  }
+}
+
+function updateMessagePattern() {
+  const newPattern = editableMessagePattern.value.trim();
+  if (newPattern !== (props.config.messagePattern || '')) {
+    updateConfig({ messagePattern: newPattern || null });
   }
 }
 </script>
