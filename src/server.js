@@ -8,7 +8,7 @@ const { v4: uuidv4 } = require('uuid');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const { configureAuthRoutes, getAccessToken } = require('./auth');
-const { configureCronJobs, restartCronJobs } = require('./cron');
+const { configureCronJobs, restartCronJobs, runCronHandler } = require('./cron');
 const { processDeployments } = require("./gitlab");
 const { ensureDbFile, getData, setData, getAllData, setAllData } = require("./db");
 const { getAllChats, getLatestMessage } = require("./helpers");
@@ -329,6 +329,32 @@ app.get('/api/db/export', async (req, res) => {
             console.error('Error exporting database:', error);
             res.status(500).send('Failed to export database.');
         }
+    }
+});
+
+app.post('/api/messages/fetch', async (req, res) => {
+    console.log('server.js POST /api/messages/fetch received');
+    try {
+        const configs = await getData(CRON_CONFIG_KEY, []);
+        const enabledConfigs = configs.filter(c => c.enabled);
+        const legacyChatId = process.env.CHAT_ID;
+        
+        // Run for all enabled configs
+        for (const config of enabledConfigs) {
+            console.log(`Running message fetch for channel "${config.channelName}" (ID: ${config.channelId})`);
+            await runCronHandler(config.channelId, config.id, config.channelName);
+        }
+
+        // Run for legacy config if available
+        if (legacyChatId && enabledConfigs.length === 0) {
+            console.log(`Running legacy message fetch for CHAT_ID ${legacyChatId}`);
+            await runCronHandler(legacyChatId, 'legacy', 'Legacy Fallback');
+        }
+
+        res.send('Messages fetch completed successfully');
+    } catch (error) {
+        console.error('Error fetching messages:', error);
+        res.status(error.message.includes('Authentication') ? 401 : 500).send(error.message || 'Failed to fetch messages');
     }
 });
 

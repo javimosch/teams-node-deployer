@@ -138,6 +138,13 @@
           </transition>
         </div>
 
+        <!-- Fetch Messages Button -->
+        <button @click="fetchMessages" :disabled="isFetching"
+          class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2 disabled:opacity-50">
+          <font-awesome-icon :icon="['fas', isFetching ? 'spinner' : 'download']" :spin="isFetching" />
+          {{ isFetching ? 'Fetching...' : 'Fetch Messages' }}
+        </button>
+
         <!-- Process Deployments Button -->
         <button @click="processDeployments" :disabled="isProcessing"
           class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50">
@@ -171,6 +178,7 @@ const filteredDeployments = ref([]);
 const searchTerm = ref('');
 const isLoading = ref(false);
 const isProcessing = ref(false);
+const isFetching = ref(false);
 const selectedDeploymentId = ref(null);
 const isModalVisible = ref(false);
 const toastContainerRef = ref(null);
@@ -267,6 +275,21 @@ function filterDeployments() {
 async function refreshDeployments() {
   await fetchDeployments();
   showToast('Deployments refreshed successfully.', 'success');
+}
+
+async function fetchMessages() {
+  isFetching.value = true;
+  try {
+    await $fetch(`${apiBase}/messages/fetch`, { method: 'POST' });
+    showToast('Messages fetched successfully.', 'success');
+    await fetchDeployments();
+  } catch (err) {
+    console.error('Error fetching messages:', err);
+    const errorMessage = err.data?.message || err.message || 'Unknown error';
+    showToast(`Error fetching messages: ${errorMessage}`, 'error');
+  } finally {
+    isFetching.value = false;
+  }
 }
 
 async function processDeployments() {

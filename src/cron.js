@@ -35,7 +35,7 @@ async function startCronJobs() {
         console.log(`Scheduling message fetch for channel "${config.channelName}" (ID: ${config.channelId}) with schedule: ${config.schedule}`);
         const task = cron.schedule(config.schedule, () => runCronHandler(config.channelId, config.id, config.channelName));
         activeCronTasks.set(`fetch-${config.id}`, task);
-        legacyFallbackEnabled = false;
+        //legacyFallbackEnabled = false; //Always enabled for now
     });
 
     const legacyChatId = process.env.CHAT_ID;
@@ -154,5 +154,6 @@ async function runCronHandler(channelId, configId, channelName = 'Unknown') {
 
 module.exports = {
     configureCronJobs,
-    restartCronJobs
+    restartCronJobs,
+    runCronHandler
 };
