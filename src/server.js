@@ -237,6 +237,12 @@ app.put('/api/cron-configs/:id', async (req, res) => {
         if (enabled !== undefined) {
             configs[index].enabled = Boolean(enabled);
         }
+
+        if(req.body.messagePattern !== undefined) {
+            configs[index].messagePattern = req.body.messagePattern;
+            console.log('messagePattern updated:', req.body.messagePattern);
+        }
+
         configs[index].updatedAt = new Date().toISOString();
 
         await setData(CRON_CONFIG_KEY, configs);
