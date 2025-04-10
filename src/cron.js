@@ -33,7 +33,7 @@ async function startCronJobs() {
             return;
         }
         console.log(`Scheduling message fetch for channel "${config.channelName}" (ID: ${config.channelId}) with schedule: ${config.schedule}`);
-        const task = cron.schedule(config.schedule, () => runCronHandler(config.channelId, config.id, config.channelName));
+        const task = cron.schedule(config.schedule, () => runCronHandler(config.channelId, config.id, config.channelName, config.messagePattern));
         activeCronTasks.set(`fetch-${config.id}`, task);
         //legacyFallbackEnabled = false; //Always enabled for now
     });
@@ -89,7 +89,7 @@ async function configureCronJobs() {
 
 let isHandlerRunning = new Map();
 
-async function runCronHandler(channelId, configId, channelName = 'Unknown') {
+async function runCronHandler(channelId, configId, channelName = 'Unknown', messagePattern = process.env.MESSAGE_PATTERN) {
     const jobId = `fetch-${configId}`;
     if (isHandlerRunning.get(jobId)) {
         console.log(`Fetch handler for ${channelName} (${jobId}) is already running. Skipping.`);
@@ -99,7 +99,7 @@ async function runCronHandler(channelId, configId, channelName = 'Unknown') {
     console.log(`Running message fetch for ${channelName} (Channel: ${channelId}, Job ID: ${jobId})...`);
 
     try {
-        if (!process.env.MESSAGE_PATTERN) {
+        if (!messagePattern) {
             console.error(`MESSAGE_PATTERN is required for job ${jobId}. Skipping.`);
             return;
         }
@@ -121,7 +121,18 @@ async function runCronHandler(channelId, configId, channelName = 'Unknown') {
             channelId: channelId
         }));
 
-        const matched = messages.filter(message => message.content.includes(process.env.MESSAGE_PATTERN));
+        console.log(`Fetched messages for ${channelName} (Job ID: ${jobId}):`, {
+            count: messages.length,
+            messages: messages.map(message => ({
+                id: message.id,
+                from: message.from,
+                content: message.content.substring(0, 30) + '...',
+                createdAt: message.createdAt
+            })),
+            messagePattern
+        });
+
+        const matched = messages.filter(message => message.content.includes(messagePattern));
 
         if (matched.length > 0) {
             console.log(`Deployment message found in ${channelName} (Job ID: ${jobId}):`, {

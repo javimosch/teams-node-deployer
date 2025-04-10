@@ -342,7 +342,7 @@ app.post('/api/messages/fetch', async (req, res) => {
         // Run for all enabled configs
         for (const config of enabledConfigs) {
             console.log(`Running message fetch for channel "${config.channelName}" (ID: ${config.channelId})`);
-            await runCronHandler(config.channelId, config.id, config.channelName);
+            await runCronHandler(config.channelId, config.id, config.channelName, config.messagePattern);
         }
 
         // Run for legacy config if available
