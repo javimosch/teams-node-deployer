@@ -45,9 +45,28 @@ async function processDeployments() {
         processing = false;
 
         const deployments = await getData('deployments', []);
+        console.log(`src/gitlab.js processDeployments finally block - updating non-canceled deployments`);
+        
+        // Only update status for non-canceled deployments that are in 'processing' state
         deployments.forEach(deployment => {
-            deployment.status = 'processed';
+            if (deployment.status !== 'canceled') {
+                // Only update deployments that are in 'processing' state
+                if (deployment.status === 'processing') {
+                    console.log(`src/gitlab.js processDeployments updating deployment status`, {
+                        id: deployment.id,
+                        oldStatus: deployment.status,
+                        newStatus: 'processed'
+                    });
+                    deployment.status = 'processed';
+                }
+            } else {
+                console.log(`src/gitlab.js processDeployments skipping canceled deployment`, {
+                    id: deployment.id,
+                    status: deployment.status
+                });
+            }
         });
+        
         await setData('deployments', deployments);
     }
 }
