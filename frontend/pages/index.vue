@@ -29,6 +29,9 @@
     <!-- Stats Cards -->
     <StatsGrid :stats="deploymentStats" />
 
+    <!-- Deployment Filters -->
+    <DeploymentFilters @filter-change="applyFilters" />
+
     <!-- Deployments List -->
     <div class="bg-white rounded-lg shadow overflow-hidden mb-12">
       <!-- Table Header -->
@@ -43,16 +46,55 @@
       <!-- Deployment Items -->
       <div id="deployments-container">
         <div v-if="isLoading" class="p-4 text-center text-gray-500">Loading...</div>
-        <div v-else-if="filteredDeployments.length === 0" class="p-4 text-center text-gray-500">
+        <div v-else-if="groupedDeployments.totalCount === 0" class="p-4 text-center text-gray-500">
           No deployments found matching your search.
         </div>
         <div v-else>
-          <DeploymentListItem
-            v-for="deployment in filteredDeployments"
-            :key="deployment.id"
-            :deployment="deployment"
+          <!-- Actionable Deployments Group -->
+          <DeploymentGroup
+            title="Actionable Deployments"
+            :deployments="groupedDeployments.actionable"
+            :default-expanded="true"
+            display-text="Needs your attention"
             @view-details="showDeploymentDetails"
           />
+          
+          <!-- Recent Deployments Group -->
+          <DeploymentGroup
+            title="Recent Deployments"
+            :deployments="groupedDeployments.recent"
+            :default-expanded="true"
+            display-text="Last 7 days"
+            @view-details="showDeploymentDetails"
+          />
+          
+          <!-- Completed Deployments Group -->
+          <DeploymentGroup
+            title="Completed Deployments"
+            :deployments="groupedDeployments.completed"
+            :default-expanded="false"
+            display-text="Previously deployed"
+            @view-details="showDeploymentDetails"
+          />
+          
+          <!-- Other Deployments Group -->
+          <DeploymentGroup
+            title="Other Deployments"
+            :deployments="groupedDeployments.other"
+            :default-expanded="false"
+            display-text="Archived items"
+            @view-details="showDeploymentDetails"
+          />
+          
+          <!-- Show More Button (if needed) -->
+          <div v-if="hasMoreDeployments" class="p-4 text-center">
+            <button 
+              @click="showAllDeployments"
+              class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 inline-flex items-center gap-2">
+              <font-awesome-icon :icon="['fas', 'chevron-down']" />
+              Show All Deployments
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -164,6 +206,8 @@
 import { ref, computed, onMounted, provide } from 'vue';
 import StatsGrid from '~/components/StatsGrid.vue';
 import DeploymentListItem from '~/components/DeploymentListItem.vue';
+import DeploymentFilters from '~/components/DeploymentFilters.vue';
+import DeploymentGroup from '~/components/DeploymentGroup.vue';
 import DeploymentModal from '~/components/DeploymentModal.vue';
 import ToastContainer from '~/components/ToastContainer.vue';
 import CronConfigList from '~/components/CronConfigList.vue';
@@ -176,6 +220,14 @@ const apiBase = config.public.apiBase;
 const allDeployments = ref([]);
 const filteredDeployments = ref([]);
 const searchTerm = ref('');
+const activeFilters = ref({
+  statuses: [],
+  dateRange: 'all',
+  onlyActionable: true,
+  limitedItems: true,
+  maxItems: 10
+});
+const showingAllDeployments = ref(false);
 const isLoading = ref(false);
 const isProcessing = ref(false);
 const isFetching = ref(false);
@@ -216,21 +268,114 @@ function computeStatus(deployment) {
 
 // --- Computed Properties ---
 const deploymentStats = computed(() => {
-  const counts = { pending: 0, skipped: 0, failed: 0, ready: 0, deployed: 0, canceled: 0, processing: 0 };
+  if (isLoading.value) return [];
 
-  if (!Array.isArray(allDeployments.value)) {
-    console.warn('deploymentStats computed property received non-array:', allDeployments.value);
-    return counts;
-  }
+  const pendingCount = allDeployments.value.filter(d => computeStatus(d) === 'pending').length;
+  const readyCount = allDeployments.value.filter(d => computeStatus(d) === 'ready').length;
+  const failedCount = allDeployments.value.filter(d => computeStatus(d) === 'failed').length;
+  const deployedCount = allDeployments.value.filter(d => computeStatus(d) === 'deployed').length;
 
-  allDeployments.value.forEach(deployment => {
-    const computed = computeStatus(deployment);
-    if (counts.hasOwnProperty(computed)) counts[computed]++;
-    else if (deployment.status === 'processing') counts.processing++;
-    else counts.pending++;
-  });
-  return counts;
+  return [
+    { name: 'Pending', count: pendingCount, color: 'blue', icon: 'clock' },
+    { name: 'Ready', count: readyCount, color: 'green', icon: 'check-circle' },
+    { name: 'Failed', count: failedCount, color: 'red', icon: 'exclamation-circle' },
+    { name: 'Deployed', count: deployedCount, color: 'purple', icon: 'rocket' },
+  ];
 });
+
+// Group deployments for display
+const groupedDeployments = computed(() => {
+  console.log('index.vue groupedDeployments', { count: filteredDeployments.value.length });
+  
+  // Start with filtered deployments
+  let deployments = [...filteredDeployments.value];
+  
+  // Sort by date (newest first)
+  deployments.sort((a, b) => {
+    const dateA = new Date(a.updatedAt || a.createdAt).getTime();
+    const dateB = new Date(b.updatedAt || b.createdAt).getTime();
+    return dateB - dateA;
+  });
+  
+  // Apply max items limit if needed
+  const isLimited = activeFilters.value.limitedItems && !showingAllDeployments.value;
+  
+  // Define groups
+  let actionable = [];
+  let recent = [];
+  let completed = [];
+  let other = [];
+  
+  // Categorize each deployment
+  for (const deployment of deployments) {
+    const status = computeStatus(deployment);
+    
+    // Actionable: ready for approval or failed
+    if (status === 'ready' || status === 'failed') {
+      actionable.push(deployment);
+    }
+    // Recent: last 7 days but not actionable or deployed
+    else if (isRecent(deployment) && status !== 'deployed') {
+      recent.push(deployment);
+    }
+    // Completed: deployed successfully
+    else if (status === 'deployed') {
+      completed.push(deployment);
+    }
+    // Other: everything else
+    else {
+      other.push(deployment);
+    }
+  }
+  
+  // Apply filters
+  if (isLimited) {
+    // Always show all actionable items
+    recent = recent.slice(0, activeFilters.value.maxItems);
+    completed = completed.slice(0, activeFilters.value.maxItems);
+    other = other.slice(0, activeFilters.value.maxItems);
+  }
+  
+  // Only show actionable items if filter is enabled
+  if (activeFilters.value.onlyActionable && !showingAllDeployments.value) {
+    return {
+      actionable,
+      recent: [],
+      completed: [],
+      other: [],
+      totalCount: actionable.length
+    };
+  }
+  
+  // Return grouped deployments
+  return {
+    actionable,
+    recent,
+    completed,
+    other,
+    totalCount: actionable.length + recent.length + completed.length + other.length
+  };
+});
+
+// Check if there are more deployments to show
+const hasMoreDeployments = computed(() => {
+  if (!activeFilters.value.limitedItems || showingAllDeployments.value) return false;
+  
+  const totalVisible = groupedDeployments.value.actionable.length +
+                      groupedDeployments.value.recent.length +
+                      groupedDeployments.value.completed.length +
+                      groupedDeployments.value.other.length;
+                      
+  return totalVisible < filteredDeployments.value.length;
+});
+
+// Helper function to check if a deployment is recent (last 7 days)
+function isRecent(deployment) {
+  const date = new Date(deployment.updatedAt || deployment.createdAt);
+  const now = new Date();
+  const oneWeekAgo = new Date(now.setDate(now.getDate() - 7));
+  return date >= oneWeekAgo;
+}
 
 // --- Toast ---
 function showToast(message, type = 'success', title = null) {
@@ -260,16 +405,66 @@ async function fetchDeployments() {
 }
 
 function filterDeployments() {
+  console.log('index.vue filterDeployments', { searchTerm: searchTerm.value, activeFilters: activeFilters.value });
+  
   const term = searchTerm.value.toLowerCase();
-  if (!term) {
-    filteredDeployments.value = [...allDeployments.value];
-  } else {
-    filteredDeployments.value = allDeployments.value.filter(deployment =>
+  let filtered = [...allDeployments.value];
+  
+  // Text search
+  if (term) {
+    filtered = filtered.filter(deployment =>
+      // Search in all fields including branches
       Object.values(deployment).some(value =>
         String(value).toLowerCase().includes(term)
       ) || (deployment.processedBranches?.join(' ')?.toLowerCase() || '').includes(term)
     );
   }
+  
+  // Status filter
+  if (activeFilters.value.statuses && activeFilters.value.statuses.length > 0) {
+    filtered = filtered.filter(deployment => {
+      const status = computeStatus(deployment);
+      return activeFilters.value.statuses.includes(status);
+    });
+  }
+  
+  // Date range filter
+  if (activeFilters.value.dateRange !== 'all') {
+    const now = new Date();
+    let cutoffDate;
+    
+    if (activeFilters.value.dateRange === 'today') {
+      cutoffDate = new Date(now.setHours(0, 0, 0, 0));
+    } else if (activeFilters.value.dateRange === 'week') {
+      cutoffDate = new Date(now.setDate(now.getDate() - 7));
+    } else if (activeFilters.value.dateRange === 'month') {
+      cutoffDate = new Date(now.setDate(now.getDate() - 30));
+    }
+    
+    if (cutoffDate) {
+      filtered = filtered.filter(deployment => {
+        const deploymentDate = new Date(deployment.updatedAt || deployment.createdAt);
+        return deploymentDate >= cutoffDate;
+      });
+    }
+  }
+  
+  filteredDeployments.value = filtered;
+}
+
+// Apply filters from the filter component
+function applyFilters(filters) {
+  console.log('index.vue applyFilters', { filters });
+  activeFilters.value = { ...filters };
+  // Reset all deployments view when filters change
+  showingAllDeployments.value = false;
+  filterDeployments();
+}
+
+// Show all deployments (remove limits)
+function showAllDeployments() {
+  console.log('index.vue showAllDeployments');
+  showingAllDeployments.value = true;
 }
 
 async function refreshDeployments() {
