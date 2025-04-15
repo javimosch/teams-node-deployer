@@ -20,7 +20,9 @@ RUN bun build ./src/server.js --outfile=dist/server.mjs --target node && cd fron
 FROM oven/bun:alpine
 
 # Install git
-RUN apk add --no-cache git && git config pull.ff only 
+RUN apk add --no-cache git \
+    && git --version \
+    && git config --global pull.ff only
 
 WORKDIR /usr/src/app
 

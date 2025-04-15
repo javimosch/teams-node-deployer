@@ -133,6 +133,45 @@ async function cloneRepo() {
             throw new Error('Git directory not found after clone - possible incomplete clone');
         }
 
+        // Configure git to use fast-forward only for pulls to avoid divergent branches errors
+        console.log(`src/gitlab.js ${functionName} Configuring git pull.rebase false`, { targetDir });
+        await new Promise((resolve, reject) => {
+            const gitConfigProcess = spawn('git', ['config', 'pull.rebase', 'false'], {
+                cwd: targetDir,
+                stdio: ['ignore', 'pipe', 'pipe'],
+                env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
+            });
+
+            let stdoutData = '';
+            let stderrData = '';
+
+            gitConfigProcess.stdout.on('data', (data) => {
+                stdoutData += data;
+                console.log(`src/gitlab.js ${functionName} Git config stdout:`, data.toString());
+            });
+
+            gitConfigProcess.stderr.on('data', (data) => {
+                stderrData += data;
+                console.log(`src/gitlab.js ${functionName} Git config stderr:`, data.toString());
+            });
+
+            gitConfigProcess.on('error', (err) => {
+                console.log(`src/gitlab.js ${functionName} Git config process error:`, { message: err.message, stack: err.stack });
+                reject(err);
+            });
+
+            gitConfigProcess.on('close', (code) => {
+                if (code === 0) {
+                    console.log(`src/gitlab.js ${functionName} Git config completed successfully`);
+                    resolve();
+                } else {
+                    console.log(`src/gitlab.js ${functionName} Git config failed with code ${code}`, { stdout: stdoutData, stderr: stderrData });
+                    // Don't reject here as the clone was successful
+                    resolve();
+                }
+            });
+        });
+
         // Wait before cleanup to ensure git has finished with temp files
         await new Promise(resolve => setTimeout(resolve, 2000));
 
