@@ -252,7 +252,7 @@ async function getRepoDetailsByName(name) {
 
         console.log(`src/gitlab.js ${functionName} Starting API pagination`, { name });
         while (true) {
-            const apiUrl = `https://git.geored.fr/api/v4/projects?search=${encodeURIComponent(name)}&per_page=100&page=${page}`;
+            const apiUrl = `${process.env.GITLAB_BASE_URL}/api/v4/projects?search=${encodeURIComponent(name)}&per_page=100&page=${page}`;
             console.log(`src/gitlab.js ${functionName} Fetching page`, { apiUrl });
             const response = await axios.get(apiUrl, {
                 headers: {

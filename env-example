@@ -11,8 +11,9 @@ MESSAGE_PATTERN=agent:deploy
 
 CHAT_ID=48:notes
 
+GITLAB_BASE_URL=https://gitlab.com
 GITLAB_ACCESS_TOKEN=xx
-GITLAB_REPO_NAME=georedv3
+GITLAB_REPO_NAME=your-repo
 
 OPENROUTER_API_KEY=xx
 
