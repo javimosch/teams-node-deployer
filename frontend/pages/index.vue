@@ -52,6 +52,13 @@
             <h2 class="text-2xl font-bold text-gray-800 mb-1">Deployments</h2>
             <p class="text-gray-600">Manage and track deployment requests</p>
           </div>
+          <div class="flex items-center gap-2">
+            <button @click="showDeploymentForm = true"
+              class="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition">
+              <font-awesome-icon :icon="['fas', 'plus']" />
+              New Deployment
+            </button>
+          </div>
           <div class="flex items-center gap-4">
             <div class="relative">
               <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
@@ -152,6 +159,15 @@
           @success="(message, title) => showToast(message, 'success', title)"
           @error="message => showToast(message, 'error')"
         />
+      </div>
+      
+      <!-- Git Connectors Tab -->
+      <div v-if="activeTab === 'connectors'" class="connectors-tab">
+        <div class="flex justify-between items-center mb-6">
+          <h2 class="text-2xl font-bold text-gray-800">Git Connectors</h2>
+          <p class="text-gray-600">Manage Git provider connections for multi-repository support</p>
+        </div>
+        <GitConnectors />
       </div>
       
       <!-- Events Tab -->
@@ -289,6 +305,13 @@
         @action-error="handleActionError"
     />
 
+    <!-- New Deployment Form -->
+    <DeploymentForm
+      :show-form="showDeploymentForm"
+      @close="showDeploymentForm = false"
+      @deployment-created="handleDeploymentCreated"
+    />
+
     <!-- DB Import Modal -->
     <div v-if="showImportModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[60]" @click.self="closeImportModal">
       <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col">
@@ -376,7 +399,9 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, provide, watch } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
+import GitConnectors from '~/components/GitConnectors.vue';
+import DeploymentForm from '~/components/DeploymentForm.vue';
 import StatsGrid from '~/components/StatsGrid.vue';
 import DeploymentListItem from '~/components/DeploymentListItem.vue';
 import DeploymentModal from '~/components/DeploymentModal.vue';
@@ -392,8 +417,9 @@ const apiBase = config.public.apiBase;
 // Tab Navigation
 const tabs = [
   { id: 'deployments', name: 'Deployments', icon: 'rocket' },
-  { id: 'cron', name: 'Cron Jobs', icon: 'clock' },
-  { id: 'events', name: 'Events', icon: 'bell' }
+  { id: 'cron', name: 'Channel Polling', icon: 'clock' },
+  { id: 'connectors', name: 'Git Connectors', icon: 'code-branch' },
+  { id: 'events', name: 'Events Log', icon: 'bell' },
 ];
 const activeTab = ref('deployments');
 
@@ -440,6 +466,7 @@ const showImportModal = ref(false);
 const importJsonContent = ref('');
 const isImporting = ref(false);
 const importError = ref('');
+const showDeploymentForm = ref(false);
 
 // Provide function for modal to find deployment
 provide('findDeploymentById', (id) => allDeployments.value.find(d => d.id === id));
@@ -952,6 +979,11 @@ function handleActionComplete(message) {
 
 function handleActionError(message) {
     showToast(message, 'error');
+}
+
+function handleDeploymentCreated(deployment) {
+    showToast('Deployment created successfully', 'success');
+    fetchDeployments();
 }
 
 // --- DB Management ---

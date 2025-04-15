@@ -13,6 +13,7 @@ const { processDeployments } = require("./gitlab");
 const { ensureDbFile, getData, setData, getAllData, setAllData } = require("./db");
 const { getAllChats, getLatestMessage } = require("./helpers");
 const basicAuthMiddleware = require("express-basic-auth");
+const connectorRoutes = require('./routes/connectors');
 
 // Event tracking constants
 const EVENT_KEY = 'serverEvents';
@@ -30,6 +31,9 @@ ensureDbFile().then(() => {
 configureAuthRoutes(app)
 
 app.use(express.json());
+
+// Register API routes
+app.use('/api/connectors', connectorRoutes);
 
 if (process.env.BASIC_AUTH_USERNAME && process.env.BASIC_AUTH_PASSWORD) {
     app.use(basicAuthMiddleware({
@@ -94,6 +98,63 @@ app.use(express.static(path.join(process.cwd(), 'frontend', '.output', 'public')
 
 app.get('/api/deployments', async (req, res) => {
     res.send(await getDeployments())
+})
+
+app.post('/api/deployments', async (req, res) => {
+    const functionName = 'POST /api/deployments';
+    console.log(`server.js ${functionName} Creating new deployment`, { body: req.body });
+    
+    try {
+        const { content, from, repoName, connectorId } = req.body;
+        
+        if (!content) {
+            return res.status(400).json({ message: 'Content is required' });
+        }
+        
+        // Create deployment object
+        const deployment = {
+            id: Date.now().toString(),
+            content,
+            from: from || 'Manual UI Deployment',
+            status: 'pending',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+        
+        // Add repository and connector if provided
+        if (repoName) {
+            deployment.repoName = repoName;
+        }
+        
+        if (connectorId) {
+            deployment.connectorId = connectorId;
+        }
+        
+        // Add to database
+        let data = await getAllData();
+        if (!data.deployments) {
+            data.deployments = [];
+        }
+        
+        data.deployments.push(deployment);
+        await setAllData(data);
+        
+        // Log event
+        await logServerEvent(
+            EVENT_TYPES.INFO,
+            'Deployment Created',
+            `New deployment created${repoName ? ` for repository ${repoName}` : ''}`,
+            { deploymentId: deployment.id, content, repoName, connectorId }
+        );
+        
+        res.status(201).json(deployment);
+    } catch (err) {
+        console.log(`server.js ${functionName} Error creating deployment`, {
+            message: err.message,
+            stack: err.stack
+        });
+        res.status(500).json({ message: 'Failed to create deployment', error: err.message });
+    }
 })
 
 app.put('/api/deployments', async (req, res) => {

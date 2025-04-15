@@ -11,9 +11,14 @@ MESSAGE_PATTERN=agent:deploy
 
 CHAT_ID=48:notes
 
+# Default GitLab connection (legacy support)
+# These will be used to create a default connector if none exists
 GITLAB_BASE_URL=https://gitlab.com
 GITLAB_ACCESS_TOKEN=xx
 GITLAB_REPO_NAME=your-repo
+
+# For multi-repository support, configure git connectors via the UI
+# Each connector can have its own URL and access token
 
 OPENROUTER_API_KEY=xx
 

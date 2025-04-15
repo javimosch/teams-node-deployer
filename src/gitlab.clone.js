@@ -4,30 +4,73 @@ const path = require('path');
 const fs = require('fs').promises;
 const os = require('os');
 const { getData, setDataPushUpdateIfExists, setData } = require("./db");
+const connectorService = require('./services/connector-service');
 
-async function cloneRepo() {
-
-    if (!process.env.GITLAB_REPO_NAME) {
-        throw new Error('GITLAB_REPO_NAME not found in environment variables');
-        return;
-    }
-    if (!process.env.GITLAB_ACCESS_TOKEN) {
-        throw new Error('GITLAB_ACCESS_TOKEN not found in environment variables');
-        return;
-    }
-
+/**
+ * Clone repository using a specific connector
+ * @param {String} repoName Repository name to clone
+ * @param {String} connectorId Connector ID to use for cloning (optional - uses first active if not provided)
+ * @returns {String} Path to cloned repository
+ */
+async function cloneRepo(repoName, connectorId) {
     const functionName = 'cloneRepo';
-    try {
-        console.log(`src/gitlab.js ${functionName} Starting repository clone`);
+    
+    // If no repoName provided, use GITLAB_REPO_NAME from env
+    if (!repoName) {
+        repoName = process.env.GITLAB_REPO_NAME;
+        if (!repoName) {
+            console.log(`src/gitlab.clone.js ${functionName} No repository name provided`, {});
+            throw new Error('Repository name not provided and GITLAB_REPO_NAME not found in environment');
+        }
+    }
+    
+    // Get the connector to use
+    let connector;
+    
+    if (connectorId) {
+        // Use specific connector if ID provided
+        connector = await connectorService.getConnectorById(connectorId);
+        if (!connector) {
+            console.log(`src/gitlab.clone.js ${functionName} Connector not found`, { connectorId });
+            throw new Error(`Connector with ID ${connectorId} not found`);
+        }
+    } else {
+        // Use first active connector if no ID provided
+        const activeConnectors = await connectorService.getActiveConnectors();
+        if (activeConnectors.length === 0) {
+            // Fallback to env variables if no connectors configured
+            if (process.env.GITLAB_ACCESS_TOKEN && process.env.GITLAB_BASE_URL) {
+                connector = {
+                    type: 'gitlab',
+                    url: process.env.GITLAB_BASE_URL,
+                    accessToken: process.env.GITLAB_ACCESS_TOKEN
+                };
+            } else {
+                console.log(`src/gitlab.clone.js ${functionName} No active connectors found`, {});
+                throw new Error('No active git connectors found');
+            }
+        } else {
+            connector = activeConnectors[0];
+        }
+    }
+    
+    console.log(`src/gitlab.clone.js ${functionName} Using connector`, { 
+        connectorType: connector.type, 
+        connectorUrl: connector.url,
+        connectorName: connector.name
+    });
 
-        const repoDetails = await getRepoDetailsByName(process.env.GITLAB_REPO_NAME);
+    try {
+        console.log(`src/gitlab.clone.js ${functionName} Starting repository clone`);
+
+        const repoDetails = await getRepoDetailsByName(repoName, connector);
         if (!repoDetails) {
-            console.log(`src/gitlab.js ${functionName} getRepoDetailsByName failed`, { name: process.env.GITLAB_REPO_NAME });
+            console.log(`src/gitlab.clone.js ${functionName} getRepoDetailsByName failed`, { name: repoName });
             return;
         }
-        console.log(`src/gitlab.js ${functionName} Retrieved repo details`);
+        console.log(`src/gitlab.clone.js ${functionName} Retrieved repo details`);
 
-        const accessToken = process.env.GITLAB_ACCESS_TOKEN;
+        const accessToken = connector.accessToken;
 
         // Construct authenticated URL: https://oauth2:<token>@hostname/path.git
         const url = new URL(repoDetails.http_url_to_repo);
@@ -228,21 +271,36 @@ async function cloneRepo() {
 }
 
 
-async function getRepoDetailsByName(name) {
+/**
+ * Get repository details by name using a specific connector
+ * @param {String} name Repository name
+ * @param {Object} connector Git connector to use
+ * @returns {Object} Repository details
+ */
+async function getRepoDetailsByName(name, connector) {
     const functionName = 'getRepoDetailsByName';
-    const tryDescription = 'Fetching repo details from GitLab API';
+    const tryDescription = 'Fetching repo details from Git API';
     try {
-        console.log(`src/gitlab.js ${functionName} Checking cache for repo details`, { name });
-        let repoDetails = (await getData('repoDetails')) || null;
+        // Only support GitLab for now
+        if (connector.type !== 'gitlab') {
+            console.log(`src/gitlab.clone.js ${functionName} Unsupported connector type`, { type: connector.type });
+            throw new Error(`Unsupported connector type: ${connector.type}`);
+        }
+        
+        // Create a cache key based on connector and repo name to avoid conflicts
+        const cacheKey = `repoDetails_${connector.id || 'default'}_${name}`;
+        
+        console.log(`src/gitlab.clone.js ${functionName} Checking cache for repo details`, { name, cacheKey });
+        let repoDetails = (await getData(cacheKey)) || null;
         if (repoDetails && repoDetails.path === name) { // Ensure cached details match requested name
-            console.log(`src/gitlab.js ${functionName} Found repo details in cache`);
+            console.log(`src/gitlab.clone.js ${functionName} Found repo details in cache`);
             return repoDetails;
         }
-        console.log(`src/gitlab.js ${functionName} Repo details not in cache or mismatch, fetching from API`, { name });
+        console.log(`src/gitlab.clone.js ${functionName} Repo details not in cache or mismatch, fetching from API`, { name });
 
-        let accessToken = process.env.GITLAB_ACCESS_TOKEN;
+        let accessToken = connector.accessToken;
         if (!accessToken) {
-            console.log(`src/gitlab.js ${functionName} GITLAB_ACCESS_TOKEN not found`);
+            console.log(`src/gitlab.clone.js ${functionName} No access token in connector`);
             return null;
         }
 
@@ -252,20 +310,20 @@ async function getRepoDetailsByName(name) {
 
         console.log(`src/gitlab.js ${functionName} Starting API pagination`, { name });
         while (true) {
-            const apiUrl = `${process.env.GITLAB_BASE_URL}/api/v4/projects?search=${encodeURIComponent(name)}&per_page=100&page=${page}`;
-            console.log(`src/gitlab.js ${functionName} Fetching page`, { apiUrl });
+            const apiUrl = `${connector.url}/api/v4/projects?search=${encodeURIComponent(name)}&per_page=100&page=${page}`;
+            console.log(`src/gitlab.clone.js ${functionName} Fetching page`, { apiUrl });
             const response = await axios.get(apiUrl, {
                 headers: {
                     'Private-Token': accessToken
                 }
             });
             const pageProjects = response.data;
-            console.log(`src/gitlab.js ${functionName} Received projects`, { count: pageProjects.length, page });
+            console.log(`src/gitlab.clone.js ${functionName} Received projects`, { count: pageProjects.length, page });
 
             // Find the exact match by path
             foundProject = pageProjects.find(p => p.path === name);
             if (foundProject) {
-                console.log(`src/gitlab.js ${functionName} Found exact match`, { foundProject });
+                console.log(`src/gitlab.clone.js ${functionName} Found exact match`, { foundProject });
                 break;
             }
 
@@ -274,30 +332,32 @@ async function getRepoDetailsByName(name) {
             // Check if it was the last page
             const nextPageHeader = response.headers['x-next-page'];
             if (!nextPageHeader || nextPageHeader === '') {
-                console.log(`src/gitlab.js ${functionName} Reached last page`, { page });
+                console.log(`src/gitlab.clone.js ${functionName} Reached last page`, { page });
                 break;
             }
 
             page = parseInt(nextPageHeader, 10);
-            console.log(`src/gitlab.js ${functionName} Moving to next page`, { page });
+            console.log(`src/gitlab.clone.js ${functionName} Moving to next page`, { page });
         }
 
         if (foundProject) {
-            console.log(`src/gitlab.js ${functionName} Caching found project details`, { foundProject });
-            await setData('repoDetails', foundProject); // Cache the found project
+            console.log(`src/gitlab.clone.js ${functionName} Caching found project details`, { foundProject });
+            // Cache with the connector-specific key
+            await setData(cacheKey, foundProject); 
         } else {
-            console.log(`src/gitlab.js ${functionName} Project not found after pagination`, { name });
+            console.log(`src/gitlab.clone.js ${functionName} Project not found after pagination`, { name });
         }
 
         return foundProject || null; // Return the found project or null
 
     } catch (err) {
         const axiosResponse = err.isAxiosError ? err.response : null;
-        console.log(`src/gitlab.js ${functionName} ${tryDescription} failed`, { message: err.message, stack: err.stack, axiosResponseData: axiosResponse?.data });
+        console.log(`src/gitlab.clone.js ${functionName} ${tryDescription} failed`, { message: err.message, stack: err.stack, axiosResponseData: axiosResponse?.data });
         return null; // Return null on error
     }
 }
 
 module.exports = {
-    cloneRepo
+    cloneRepo,
+    getRepoDetailsByName
 }

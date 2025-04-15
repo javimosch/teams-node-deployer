@@ -4,12 +4,19 @@
 
 A deployment automation system that handles Git operations and version tagging for CI/CD pipelines. Manages branch merging conflicts and calculates semantic versioning tags automatically.
 
+## Limitations
+
+- Only supports GitLab (GitHub support planned for future)
+- Only supports Microsoft Teams
+- Only supports semantic versioning
+
 ## How it works
 
 - A cron check for MS Teams channel messages (MESSAGE_PATTERN) and persist them
 - A cron check for saved messages and process them for deployment
 - Deployment process checks if detected branches can be merged into preprod and tag them (semantic versioning) (Check only)
-- [TODO]: A web UI shows the queue of pending deployments and allows to process/approve them manually
+- Web UI shows the queue of pending deployments and allows to process/approve them manually
+- Multi-repository support through configurable Git connectors
 
 ## Assumptions
 

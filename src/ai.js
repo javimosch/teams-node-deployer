@@ -70,11 +70,18 @@ async function detectBranchesWithAI(content) {
         try {
             const result = JSON.parse(responseText);
             const branches = result.branches || [];
+
+            console.log('INFO: detected branches (with AI):', {branches});
+
+            if(branches.length === 0){
+                branches = await fallbackAIBranchDetection(content);
+            }
+
             branchDetectionCache.set(cacheKey, branches);
 
             await setDataPushIfNotExists('branchDetection', {cacheKey, branches}, (item) => item.cacheKey === cacheKey)
 
-            console.log('INFO: detected branches (with AI):', {branches});
+            
             return branches;
         } catch (parseError) {
             console.error('Failed to parse AI response:', {
@@ -92,6 +99,41 @@ async function detectBranchesWithAI(content) {
         });
         return [];
     }
+}
+
+async function fallbackAIBranchDetection(content) {
+    const completion = await openai.chat.completions.create({
+        model: "openai/gpt-4o-mini-2024-07-18",
+        messages: [{
+            role: "system",
+            content: `You are a git branch detection assistant. Your task is to analyze the user query, detect git branches and respond ONLY with a JSON array of branch names, or empty array if none found.
+            Example: {"branches": ["branchName1", "branchName2"]}`
+        },{
+            role: "user",
+            content: `${content}`
+        }],
+        response_format: { type: "json_object" },
+        temperature: 0.1
+    });
+
+    // Robust error checking
+    if (!completion?.choices?.[0]?.message?.content) {
+        console.error('AI response malformed:', { completion });
+        return [];
+    }
+
+    try {
+            const result = JSON.parse(completion.choices[0].message.content);
+            const branches = result.branches || [];
+            console.log('INFO: detected branches (with fallback AI):', {branches});
+            return branches;
+        } catch (parseError) {
+            console.error('Failed to parse AI response:', {
+                responseText: completion.choices[0].message.content,
+                error: parseError
+            });
+            return [];
+        }
 }
 
 async function extractBranchesFromText(content) {

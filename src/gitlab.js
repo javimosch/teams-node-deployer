@@ -2,6 +2,7 @@ const { getData, setDataPushUpdateIfExists, setData } = require("./db");
 const { cloneRepo } = require("./gitlab.clone");
 const { extractBranchesFromText, calculateNextTag } = require('./ai');
 const git = require('./git-utils');
+const connectorService = require('./services/connector-service');
 
 let processing = false;
 
@@ -9,6 +10,7 @@ const PRODUCTION_BRANCH = process.env.PRODUCTION_BRANCH || 'origin/prod';
 const PREPROD_BRANCH = process.env.PREPROD_BRANCH || 'origin/preprod';
 
 async function processDeployments() {
+    const functionName = 'processDeployments';
     if (processing) return;
     processing = true;
     try {
@@ -21,11 +23,20 @@ async function processDeployments() {
         if (deployments.length > 0) {
 
             for (const deployment of deployments) {
-                console.log('Processing deployment:', deployment);
+                console.log(`src/gitlab.js ${functionName} Processing deployment:`, deployment);
                 await setDataPushUpdateIfExists('deployments', {
                     status: 'processing'
                 }, (item) => item.id === deployment.id);
-                const repoPath = await cloneRepo();
+                // Get repository and connector information from deployment
+                const repoName = deployment.repoName || process.env.GITLAB_REPO_NAME;
+                const connectorId = deployment.connectorId;
+                
+                console.log(`src/gitlab.js ${functionName} Processing deployment with repo`, { 
+                    repoName, 
+                    connectorId: connectorId || 'default' 
+                });
+                
+                const repoPath = await cloneRepo(repoName, connectorId);
                 await deployTicket(deployment, repoPath);
 
                 await setDataPushUpdateIfExists('deployments', {
@@ -34,20 +45,28 @@ async function processDeployments() {
                 }, (item) => item.id === deployment.id);
             }
         } else {
-            console.log('No deployments to process');
+            console.log(`src/gitlab.js ${functionName} No deployments to process`);
         }
     } catch (err) {
-        console.error('Error processing deployments:', {
+        console.log(`src/gitlab.js ${functionName} Error processing deployments`, {
             message: err.message,
             stack: err.stack
         });
     } finally {
         processing = false;
 
+        // Get all deployments to update their status
         const deployments = await getData('deployments', []);
+        
+        // Only update status for non-canceled deployments that were being processed
         deployments.forEach(deployment => {
-            deployment.status = 'processed';
+            // Only mark as processed if it's not canceled and was in processing state
+            if (deployment.status !== 'canceled' && deployment.status === 'processing') {
+                console.log(`src/gitlab.js ${functionName} Setting deployment status to processed`, { id: deployment.id });
+                deployment.status = 'processed';
+            }
         });
+        
         await setData('deployments', deployments);
     }
 }
