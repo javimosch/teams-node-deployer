@@ -268,19 +268,35 @@ function computeStatus(deployment) {
 
 // --- Computed Properties ---
 const deploymentStats = computed(() => {
-  if (isLoading.value) return [];
+  console.log('index.vue deploymentStats calculating', { deploymentCount: allDeployments.value?.length || 0 });
+  
+  if (isLoading.value || !allDeployments.value || !Array.isArray(allDeployments.value)) {
+    return {
+      pending: 0,
+      skipped: 0,
+      failed: 0,
+      ready: 0,
+      deployed: 0,
+      canceled: 0
+    };
+  }
 
-  const pendingCount = allDeployments.value.filter(d => computeStatus(d) === 'pending').length;
-  const readyCount = allDeployments.value.filter(d => computeStatus(d) === 'ready').length;
-  const failedCount = allDeployments.value.filter(d => computeStatus(d) === 'failed').length;
-  const deployedCount = allDeployments.value.filter(d => computeStatus(d) === 'deployed').length;
+  // Always calculate stats from all deployments, not filtered ones
+  const counts = { pending: 0, ready: 0, failed: 0, deployed: 0, skipped: 0, canceled: 0, processing: 0 };
+  
+  allDeployments.value.forEach(deployment => {
+    const status = computeStatus(deployment);
+    if (counts.hasOwnProperty(status)) {
+      counts[status]++;
+    }
+  });
+  
+  // Include processing in pending for the UI
+  counts.pending += counts.processing;
+  
+  console.log('index.vue deploymentStats calculated', { counts });
 
-  return [
-    { name: 'Pending', count: pendingCount, color: 'blue', icon: 'clock' },
-    { name: 'Ready', count: readyCount, color: 'green', icon: 'check-circle' },
-    { name: 'Failed', count: failedCount, color: 'red', icon: 'exclamation-circle' },
-    { name: 'Deployed', count: deployedCount, color: 'purple', icon: 'rocket' },
-  ];
+  return counts;
 });
 
 // Group deployments for display
