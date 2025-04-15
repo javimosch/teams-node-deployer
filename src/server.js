@@ -14,6 +14,15 @@ const { ensureDbFile, getData, setData, getAllData, setAllData } = require("./db
 const { getAllChats, getLatestMessage } = require("./helpers");
 const basicAuthMiddleware = require("express-basic-auth");
 
+// Event tracking constants
+const EVENT_KEY = 'serverEvents';
+const EVENT_TYPES = {
+  INFO: 'info',
+  SUCCESS: 'success',
+  WARNING: 'warning',
+  ERROR: 'error'
+};
+
 ensureDbFile().then(() => {
     configureCronJobs();
 });
@@ -44,6 +53,41 @@ async function getDeployments() {
         const bDate = new Date(b.updatedAt ?? b.createdAt).getTime();
         return bDate - aDate;
     });
+}
+
+// Track server events
+async function logServerEvent(type, title, message, details = null) {
+    console.log(`server.js logServerEvent`, {type, title, message});
+    
+    try {
+        // Create the event object
+        const event = {
+            id: uuidv4(),
+            type: type,
+            title: title,
+            message: message,
+            details: details,
+            timestamp: new Date().toISOString(),
+            read: false
+        };
+        
+        // Get existing events
+        const events = await getData(EVENT_KEY, []);
+        
+        // Add new event at the beginning
+        events.unshift(event);
+        
+        // Keep only the latest 100 events
+        const trimmedEvents = events.slice(0, 100);
+        
+        // Save events
+        await setData(EVENT_KEY, trimmedEvents);
+        
+        return event;
+    } catch (err) {
+        console.log(`server.js logServerEvent error`, {message: err.message, stack: err.stack});
+        return null;
+    }
 }
 
 app.use(express.static(path.join(process.cwd(), 'frontend', '.output', 'public')));
@@ -118,6 +162,15 @@ app.put('/api/deployments', async (req, res) => {
 
     if (approved === true) {
         console.log(`Deployment ${id} approved, triggering processing.`);
+        
+        // Log event for deployment approval
+        await logServerEvent(
+            EVENT_TYPES.INFO,
+            'Deployment Approved',
+            `Deployment #${id} was approved for processing`,
+            { deploymentId: id }
+        );
+        
         setTimeout(() => processDeployments(), 1000);
     }
 
@@ -161,14 +214,48 @@ app.post('/api/deployments/:id/cancel', async (req, res) => {
 app.post('/api/deployments/process', async (req, res) => {
     console.log('server.js POST /api/deployments/process received');
     try {
-        processDeployments().catch(err => {
-            console.error("Background deployment processing failed:", err);
-        });
-        console.log('server.js POST /api/deployments/process triggered processing');
-        res.status(202).send('Deployment processing initiated');
+        // Log event for processing start
+        await logServerEvent(
+            EVENT_TYPES.INFO,
+            'Deployment Processing Started',
+            'Started processing pending deployments',
+            { initiatedBy: 'user', timestamp: new Date().toISOString() }
+        );
+        
+        processDeployments()
+            .then(async (result) => {
+                // Log success event
+                await logServerEvent(
+                    EVENT_TYPES.SUCCESS,
+                    'Deployment Processing Completed',
+                    `Successfully processed deployments`,
+                    result
+                );
+            })
+            .catch(async (err) => {
+                console.error('Error in processDeployments:', err);
+                // Log error event
+                await logServerEvent(
+                    EVENT_TYPES.ERROR,
+                    'Deployment Processing Failed',
+                    `Error occurred during deployment processing: ${err.message}`,
+                    { error: err.message, stack: err.stack }
+                );
+            });
+            
+        res.send('Processing started');
     } catch (error) {
-        console.error('Error initiating deployment processing:', error);
-        res.status(500).send('Failed to initiate deployment processing');
+        console.error('Error processing deployments:', error);
+        
+        // Log error event
+        await logServerEvent(
+            EVENT_TYPES.ERROR,
+            'Deployment Processing Error',
+            `Failed to start deployment processing: ${error.message}`,
+            { error: error.message, stack: error.stack }
+        );
+        
+        res.status(500).send('Failed to process deployments');
     }
 });
 
@@ -320,6 +407,58 @@ app.post('/api/cron-configs/:id/test', async (req, res) => {
     }
 });
 
+// Events API endpoints
+app.get('/api/events', async (req, res) => {
+    try {
+        const events = await getData(EVENT_KEY, []);
+        res.json(events);
+    } catch (error) {
+        console.error('Error fetching events:', error);
+        res.status(500).send('Failed to fetch events');
+    }
+});
+
+app.put('/api/events/mark-read', async (req, res) => {
+    try {
+        const { eventIds } = req.body;
+        
+        if (!Array.isArray(eventIds)) {
+            return res.status(400).send('eventIds must be an array');
+        }
+        
+        const events = await getData(EVENT_KEY, []);
+        
+        // Mark specified events as read
+        const updatedEvents = events.map(event => {
+            if (eventIds.includes(event.id)) {
+                return { ...event, read: true };
+            }
+            return event;
+        });
+        
+        await setData(EVENT_KEY, updatedEvents);
+        res.json({ success: true, markedCount: eventIds.length });
+    } catch (error) {
+        console.error('Error marking events as read:', error);
+        res.status(500).send('Failed to mark events as read');
+    }
+});
+
+app.put('/api/events/mark-all-read', async (req, res) => {
+    try {
+        const events = await getData(EVENT_KEY, []);
+        
+        // Mark all events as read
+        const updatedEvents = events.map(event => ({ ...event, read: true }));
+        
+        await setData(EVENT_KEY, updatedEvents);
+        res.json({ success: true, markedCount: events.length });
+    } catch (error) {
+        console.error('Error marking all events as read:', error);
+        res.status(500).send('Failed to mark all events as read');
+    }
+});
+
 app.get('/api/db/export', async (req, res) => {
     try {
         const filePath = path.join(process.cwd(), 'data.json');
@@ -327,6 +466,14 @@ app.get('/api/db/export', async (req, res) => {
         res.setHeader('Content-Disposition', 'attachment; filename=data.json');
         res.setHeader('Content-Type', 'application/json');
         res.sendFile(filePath);
+        
+        // Log event for DB export
+        await logServerEvent(
+            EVENT_TYPES.INFO,
+            'Database Exported',
+            'Database was exported by a user',
+            { timestamp: new Date().toISOString() }
+        );
     } catch (error) {
         if (error.code === 'ENOENT') {
             console.error('Export failed: data.json not found.');
@@ -341,25 +488,62 @@ app.get('/api/db/export', async (req, res) => {
 app.post('/api/messages/fetch', async (req, res) => {
     console.log('server.js POST /api/messages/fetch received');
     try {
+        // Log event for message fetch start
+        await logServerEvent(
+            EVENT_TYPES.INFO,
+            'Message Fetch Started',
+            'Started fetching messages from Teams channels',
+            { initiatedBy: 'user', timestamp: new Date().toISOString() }
+        );
+        
         const configs = await getData(CRON_CONFIG_KEY, []);
         const enabledConfigs = configs.filter(c => c.enabled);
         const legacyChatId = process.env.CHAT_ID;
         
+        let fetchResults = [];
+        
         // Run for all enabled configs
         for (const config of enabledConfigs) {
             console.log(`Running message fetch for channel "${config.channelName}" (ID: ${config.channelId})`);
-            await runCronHandler(config.channelId, config.id, config.channelName, config.messagePattern);
+            const result = await runCronHandler(config.channelId, config.id, config.channelName, config.messagePattern);
+            fetchResults.push({
+                channelId: config.channelId,
+                channelName: config.channelName,
+                result: result
+            });
         }
 
         // Run for legacy config if available
         if (legacyChatId && enabledConfigs.length === 0) {
             console.log(`Running legacy message fetch for CHAT_ID ${legacyChatId}`);
-            await runCronHandler(legacyChatId, 'legacy', 'Legacy Fallback');
+            const result = await runCronHandler(legacyChatId, 'legacy', 'Legacy Fallback');
+            fetchResults.push({
+                channelId: legacyChatId,
+                channelName: 'Legacy Fallback',
+                result: result
+            });
         }
+
+        // Log success event
+        await logServerEvent(
+            EVENT_TYPES.SUCCESS,
+            'Message Fetch Completed',
+            `Successfully fetched messages from ${enabledConfigs.length} channels`,
+            { channels: fetchResults }
+        );
 
         res.send('Messages fetch completed successfully');
     } catch (error) {
         console.error('Error fetching messages:', error);
+        
+        // Log error event
+        await logServerEvent(
+            EVENT_TYPES.ERROR,
+            'Message Fetch Failed',
+            `Error occurred during message fetch: ${error.message}`,
+            { error: error.message, stack: error.stack }
+        );
+        
         res.status(error.message.includes('Authentication') ? 401 : 500).send(error.message || 'Failed to fetch messages');
     }
 });
@@ -384,9 +568,30 @@ app.post('/api/db/import', async (req, res) => {
              setTimeout(() => processDeployments().catch(err => console.error("Post-import processing failed:", err)), 1000);
         }
 
+        // Log event for DB import
+        await logServerEvent(
+            EVENT_TYPES.SUCCESS,
+            'Database Imported',
+            'Database was imported successfully',
+            { 
+                deployments: importData.hasOwnProperty('deployments'),
+                cronConfigs: importData.hasOwnProperty(CRON_CONFIG_KEY),
+                timestamp: new Date().toISOString()
+            }
+        );
+
         res.status(200).send('Database imported successfully.');
     } catch (error) {
         console.error('Error importing database:', error);
+        
+        // Log error event
+        await logServerEvent(
+            EVENT_TYPES.ERROR,
+            'Database Import Failed',
+            `Failed to import database: ${error.message}`,
+            { error: error.message, stack: error.stack }
+        );
+        
         res.status(500).send(`Failed to import database: ${error.message}`);
     }
 });

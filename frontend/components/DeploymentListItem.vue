@@ -3,11 +3,11 @@
     <div class="col-span-4 md:col-span-5">
       <div class="font-medium text-gray-800 flex items-center gap-2">
         <font-awesome-icon :icon="['fas', 'user-circle']" class="text-indigo-500" />
-        {{ deployment.from }}
+        {{ deployment?.from || 'Unknown user' }}
       </div>
       <div class="text-gray-500 text-sm mt-1 content-preview" v-html="contentPreview"></div>
-      <div v-if="deployment.nextTag" class="mt-1">
-        <span class="text-xs px-2 py-1 bg-indigo-100 text-indigo-800 rounded">Tag: {{ deployment.nextTag }}</span>
+      <div v-if="deployment?.nextTag" class="mt-1">
+        <span class="text-xs px-2 py-1 bg-indigo-100 text-indigo-800 rounded">Tag: {{ deployment?.nextTag }}</span>
       </div>
     </div>
     <div class="col-span-4 md:col-span-2 flex items-center">
@@ -16,7 +16,7 @@
         title="Errors occurred during processing" />
     </div>
     <div class="col-span-2 md:col-span-2 flex items-center">
-      <span v-if="deployment.nextTag" v-html="approvalElement"></span>
+      <span v-if="deployment?.nextTag" v-html="approvalElement"></span>
       <span v-else class="px-2 py-1 rounded-full bg-gray-100 text-gray-600 text-xs flex items-center gap-1">
         <font-awesome-icon :icon="['fas', 'minus-circle']" /> Not needed
       </span>
@@ -72,61 +72,26 @@ function deploymentLogGet(deployment, strs) {
 }
 
 function computeStatus(deployment) {
-  console.log('DeploymentListItem.vue computeStatus', {
-    status: deployment?.status,
-    nextTag: deployment?.nextTag,
-    deployed: deployment?.deployed,
-    hasErrors: deployment?.processingBranchErrors?.length > 0,
-    blacklistedBranches: deployment?.blacklistedBranches || [],
-    allBranchesBlacklisted: deployment?.blacklistedBranches?.length > 0 && 
-                            deployment?.processedBranches?.every(branch => 
-                              deployment.blacklistedBranches.includes(branch))
-  });
-  
+  console.log('DeploymentListItem.vue computeStatus', { deploymentId: deployment?.id });
   if (!deployment) return 'pending';
 
   const status = deployment.status;
   const logs = deployment.processingLogs || [];
 
-  let some = str => logs.some(log => (log.message || '').toLowerCase().includes(str));
-  
-  // Check if all processed branches are blacklisted
-  const allBranchesBlacklisted = deployment.blacklistedBranches?.length > 0 && 
-                                deployment.processedBranches?.length > 0 && 
-                                deployment.processedBranches.every(branch => 
-                                  deployment.blacklistedBranches.includes(branch));
+  let some = str => logs.some(log => (log?.message || '').toLowerCase().includes(str));
 
   if (status === 'processed' && deployment.deployed === true) {
     return 'deployed';
   }
-  
-  // If all branches are blacklisted, show as skipped
-  if (allBranchesBlacklisted) {
+  if (deploymentHasLog(deployment, ['tag', 'already']) || deploymentHasLog(deployment, ['no', 'changes']) || !deployment?.nextTag) {
     return 'skipped';
   }
-  
-  // Check for skipped status
-  if (deploymentHasLog(deployment, ['tag', 'already']) || 
-      deploymentHasLog(deployment, ['no', 'changes']) || 
-      !deployment.nextTag) {
-    return 'skipped';
-  }
-  
-  // Only consider it failed if there are errors on non-blacklisted branches
-  const hasErrors = some('error') || some('fatal') || (deployment.processingBranchErrors && deployment.processingBranchErrors.length > 0);
-  const blacklistedBranches = deployment.blacklistedBranches || [];
-  
-  const hasNonBlacklistedErrors = deployment.processingBranchErrors && 
-      deployment.processingBranchErrors.some(error => !blacklistedBranches.includes(error.branch));
-  
-  if (hasErrors && hasNonBlacklistedErrors) {
+  if (some('error') || some('fatal') || (deployment?.processingBranchErrors && deployment.processingBranchErrors.length > 0)) {
     return 'failed';
   }
-  
-  if (status === 'processed' && deployment.nextTag) {
+  if (status === 'processed') {
     return 'ready';
   }
-  
   // Handle 'processing' explicitly if needed, otherwise rely on backend status
   return status || 'pending';
 }
@@ -158,7 +123,7 @@ function getApprovalInfo(approved) {
 // --- Computed Properties ---
 const computedStatus = computed(() => computeStatus(props.deployment));
 const statusInfo = computed(() => getStatusInfo(computedStatus.value));
-const approvalInfo = computed(() => getApprovalInfo(props.deployment.approved));
+const approvalInfo = computed(() => getApprovalInfo(props.deployment?.approved));
 
 const statusElement = computed(() => {
   const { label, color, icon } = statusInfo.value;
@@ -169,21 +134,22 @@ const statusElement = computed(() => {
 });
 
 const statusTitle = computed(() => {
+  console.log('DeploymentListItem.vue statusTitle computing', { status: computedStatus.value });
   const status = computedStatus.value;
   if (status === 'skipped') {
     const tagLog = deploymentLogGet(props.deployment, ['tag', 'already']);
-    if (tagLog) return tagLog.message;
+    if (tagLog?.message) return tagLog.message;
     const noChangesLog = deploymentLogGet(props.deployment, ['no', 'changes']);
-    if (noChangesLog) return noChangesLog.message;
+    if (noChangesLog?.message) return noChangesLog.message;
 
     const branchNotFoundLog = deploymentLogGet(props.deployment, ['branch', 'not', 'exist'])
-    if (branchNotFoundLog) return branchNotFoundLog.message;
+    if (branchNotFoundLog?.message) return branchNotFoundLog.message;
 
-    if (!props.deployment.nextTag) {
+    if (!props.deployment?.nextTag) {
       return 'Tag not found';
     }
   }
-  return statusInfo.value.label; // Default title is the status label
+  return statusInfo.value?.label || 'Unknown status'; // Default title is the status label
 });
 
 
@@ -195,18 +161,28 @@ const approvalElement = computed(() => {
 });
 
 const formattedUpdatedAt = computed(() => {
-  const dateToFormat = props.deployment.updatedAt || props.deployment.createdAt;
+  const dateToFormat = props.deployment?.updatedAt || props.deployment?.createdAt;
   return formatDate(dateToFormat);
 });
 
 const contentPreview = computed(() => {
   // Basic preview, might need refinement for complex HTML
-  const text = stripHtml(props.deployment.content);
-  return text.substring(0, 100) + (text.length > 100 ? '...' : '');
+  if (!props.deployment) return '';
+  
+  try {
+    const text = stripHtml(props.deployment?.content || '');
+    return text.substring(0, 100) + (text.length > 100 ? '...' : '');
+  } catch (err) {
+    console.log('DeploymentListItem.vue contentPreview error', {
+      message: err.message,
+      stack: err.stack
+    });
+    return 'Error previewing content';
+  }
 });
 
 const hasErrors = computed(() => {
-  return props.deployment.processingBranchErrors && props.deployment.processingBranchErrors.length > 0;
+  return props.deployment?.processingBranchErrors && props.deployment.processingBranchErrors.length > 0;
 });
 
 

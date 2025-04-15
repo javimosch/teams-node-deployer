@@ -70,18 +70,29 @@ const isLoading = ref(false);
 const legacyCronInfo = ref(null);
 
 async function fetchCronConfigs() {
+  console.log('CronConfigList.vue fetchCronConfigs starting');
   isLoading.value = true;
   try {
     const data = await $fetch(`${props.apiBase}/cron-configs`);
-    cronConfigs.value = data || [];
-    const hasEnabledDynamicConfig = cronConfigs.value.some(c => c.enabled);
+    console.log('CronConfigList.vue fetchCronConfigs response', { data });
+    
+    // Ensure cronConfigs is always an array
+    cronConfigs.value = Array.isArray(data) ? data : [];
+    
+    // Safely check for enabled configs
+    const hasEnabledDynamicConfig = Array.isArray(cronConfigs.value) && cronConfigs.value.some(c => c.enabled);
+    
     if (!hasEnabledDynamicConfig && !process.env.NUXT_PUBLIC_DISABLE_LEGACY_CRON) {
         legacyCronInfo.value = `CHAT_ID ${process.env.NUXT_PUBLIC_LEGACY_CHAT_ID || '?'}`;
     } else {
         legacyCronInfo.value = null;
     }
   } catch (err) {
-    console.error('Error fetching cron configs:', err);
+    console.log('CronConfigList.vue fetchCronConfigs error', {
+      message: err.message,
+      stack: err.stack,
+      data: err.data
+    });
     emit('error', `Failed to load cron configs: ${err.data?.message || err.message}`);
     cronConfigs.value = [];
     legacyCronInfo.value = null;

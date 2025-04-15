@@ -45,28 +45,9 @@ async function processDeployments() {
         processing = false;
 
         const deployments = await getData('deployments', []);
-        console.log(`src/gitlab.js processDeployments finally block - updating non-canceled deployments`);
-        
-        // Only update status for non-canceled deployments that are in 'processing' state
         deployments.forEach(deployment => {
-            if (deployment.status !== 'canceled') {
-                // Only update deployments that are in 'processing' state
-                if (deployment.status === 'processing') {
-                    console.log(`src/gitlab.js processDeployments updating deployment status`, {
-                        id: deployment.id,
-                        oldStatus: deployment.status,
-                        newStatus: 'processed'
-                    });
-                    deployment.status = 'processed';
-                }
-            } else {
-                console.log(`src/gitlab.js processDeployments skipping canceled deployment`, {
-                    id: deployment.id,
-                    status: deployment.status
-                });
-            }
+            deployment.status = 'processed';
         });
-        
         await setData('deployments', deployments);
     }
 }
@@ -77,13 +58,6 @@ async function deployTicket(deployment, repoPath) {
 
     deployment.processingBranchErrors = [];
     deployment.processingLogs = [];
-    // Ensure blacklistedBranches is initialized but preserved
-    deployment.blacklistedBranches = deployment.blacklistedBranches || [];
-    
-    console.log(`src/gitlab.js ${functionName} Deployment initialized`, {
-        id: deployment.id,
-        blacklistedBranches: deployment.blacklistedBranches
-    });
 
     try {
         console.log(`src/gitlab.js ${functionName} Starting deployment processing`, { deployment });
@@ -114,15 +88,8 @@ async function deployTicket(deployment, repoPath) {
 
                 deployment.processingLogs = deployment.processingLogs || [];
 
-                // Check if this branch is in the blacklist
-                const blacklistedBranches = deployment.blacklistedBranches || [];
-                console.log(`src/gitlab.js ${functionName} Checking if branch is blacklisted`, {
-                    branch,
-                    blacklistedBranches
-                });
-                
-                if (blacklistedBranches.some(blacklisted => branch === blacklisted || branch.includes(blacklisted))) {
-                    console.log(`src/gitlab.js ${functionName} Skipping blacklisted branch`, { branch, blacklistedBranches: deployment.blacklistedBranches });
+                if (deployment.blacklistedBranches || [].some(blacklisted => branch.includes(blacklisted))) {
+                    console.log(`src/gitlab.js ${functionName} Skipping blacklisted branch`, { branch });
                     deployment.processingLogs.push({
                         branch,
                         message: `Branch blacklisted`
