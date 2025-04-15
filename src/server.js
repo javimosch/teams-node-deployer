@@ -53,8 +53,8 @@ app.get('/api/deployments', async (req, res) => {
 })
 
 app.put('/api/deployments', async (req, res) => {
-    const { id, status, approved } = req.body
-    console.log('server.js updateDeployment', { id, status })
+    const { id, status, approved, blacklistedBranches } = req.body
+    console.log('server.js updateDeployment', { id, status, blacklistedBranches })
     let data;
     try {
         data = JSON.parse(await fs.readFile(path.join(process.cwd(), 'data.json'), 'utf8'));
@@ -87,6 +87,12 @@ app.put('/api/deployments', async (req, res) => {
         deployment.approved = null;
     } else if (!!status) {
         deployment.status = status;
+    }
+    
+    // Handle blacklisted branches update if provided
+    if (blacklistedBranches !== undefined) {
+        console.log('server.js updateDeployment updating blacklistedBranches', { blacklistedBranches });
+        deployment.blacklistedBranches = blacklistedBranches;
     }
 
     if (approved === true) {

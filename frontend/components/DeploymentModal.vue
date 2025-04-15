@@ -34,6 +34,25 @@
               </span>
             </div>
           </div>
+          
+          <div v-if="deployment.blacklistedBranches && deployment.blacklistedBranches.length > 0">
+            <h4 class="text-sm font-medium text-gray-500 text-gray-600">Blacklisted Branches</h4>
+            <div class="mt-1 space-y-2">
+              <div v-for="(branch, index) in deployment.blacklistedBranches" :key="index" class="text-sm bg-gray-100 p-2 rounded-lg flex justify-between items-center">
+                <div class="flex items-center">
+                  <font-awesome-icon :icon="['fas', 'ban']" class="text-gray-500 mr-2" />
+                  <span class="text-gray-800">{{ branch }}</span>
+                </div>
+                <button 
+                  @click="toggleBranchBlacklist(branch)" 
+                  class="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 flex items-center gap-1"
+                >
+                  <font-awesome-icon :icon="['fas', 'times']" />
+                  Remove
+                </button>
+              </div>
+            </div>
+          </div>
            <div v-if="deployment.nextTag">
               <h4 class="text-sm font-medium text-gray-500">Next Tag</h4>
               <p class="mt-1 text-sm text-gray-900">{{ deployment.nextTag }}</p>
@@ -42,7 +61,17 @@
             <h4 class="text-sm font-medium text-gray-500 text-red-600">Errors</h4>
             <div class="mt-1 space-y-2">
               <div v-for="(error, index) in deployment.processingBranchErrors" :key="index" class="text-sm text-red-600 bg-red-50 p-3 rounded-lg">
-                <p class="font-medium">Branch: {{ error.branch }}</p>
+                <div class="flex justify-between items-start">
+                  <p class="font-medium">Branch: {{ error.branch }}</p>
+                  <button 
+                    @click="toggleBranchBlacklist(error.branch)" 
+                    class="px-2 py-1 text-xs rounded-md flex items-center gap-1"
+                    :class="isBranchBlacklisted(error.branch) ? 'bg-gray-600 text-white' : 'bg-red-100 text-red-700 border border-red-300'"
+                  >
+                    <font-awesome-icon :icon="['fas', isBranchBlacklisted(error.branch) ? 'check' : 'ban']" />
+                    {{ isBranchBlacklisted(error.branch) ? 'Blacklisted' : 'Blacklist Branch' }}
+                  </button>
+                </div>
                 <p class="mt-1">{{ error.message }}</p>
                 <pre v-if="error.stack" class="mt-2 text-xs overflow-x-auto bg-red-100 p-2 rounded">{{ error.stack }}</pre>
               </div>
@@ -216,6 +245,42 @@ function closeModal() {
   emit('close');
 }
 
+function isBranchBlacklisted(branch) {
+  return (deployment.value?.blacklistedBranches || []).includes(branch);
+}
+
+async function toggleBranchBlacklist(branch) {
+  console.log('DeploymentModal.vue toggleBranchBlacklist', { branch });
+  
+  let updatedBlacklist = [...(deployment.value?.blacklistedBranches || [])];
+  
+  if (isBranchBlacklisted(branch)) {
+    // Remove from blacklist
+    updatedBlacklist = updatedBlacklist.filter(b => b !== branch);
+  } else {
+    // Add to blacklist
+    updatedBlacklist.push(branch);
+  }
+  
+  try {
+    const updatedDeployment = await $fetch(`${apiBase}/deployments`, {
+      method: 'PUT',
+      body: {
+        id: deployment.value.id,
+        blacklistedBranches: updatedBlacklist
+      }
+    });
+    
+    emit('update:deployment', updatedDeployment);
+  } catch (error) {
+    console.log('DeploymentModal.vue toggleBranchBlacklist error', {
+      message: error.message,
+      stack: error.stack
+    });
+    emit('action-error', `Error updating branch blacklist: ${error.message || 'Unknown error'}`);
+  }
+}
+
 async function fetchDeploymentDetails() {
     if (!props.deploymentId) {
         deployment.value = null;
@@ -286,23 +351,31 @@ async function cancel() {
 }
 
 async function markPending() {
-    if (!confirm('Are you sure you want to mark this deployment as pending? This will clear logs and errors.')) return;
-     await performAction(
+    if (!confirm('Are you sure you want to mark this deployment as pending? This will clear logs and errors but preserve blacklisted branches.')) return;
+    
+    console.log('DeploymentModal.vue markPending', {
+        id: deployment.value.id,
+        blacklistedBranches: deployment.value?.blacklistedBranches || []
+    });
+    
+    await performAction(
         async () => {
-             const updatedDeployment = await $fetch(`${apiBase}/deployments`, {
+            const updatedDeployment = await $fetch(`${apiBase}/deployments`, {
                 method: 'PUT',
                 body: {
                     id: deployment.value.id,
                     status: 'pending',
                     processingLogs: [],
-                    processingBranchErrors: []
+                    processingBranchErrors: [],
+                    // Preserve the blacklisted branches
+                    blacklistedBranches: deployment.value?.blacklistedBranches || []
                 }
             });
-             emit('update:deployment', updatedDeployment);
+            emit('update:deployment', updatedDeployment);
         },
         'Deployment marked as pending successfully.',
         'Error marking deployment as pending'
-     );
+    );
 }
 
 
