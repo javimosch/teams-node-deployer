@@ -72,25 +72,61 @@ function deploymentLogGet(deployment, strs) {
 }
 
 function computeStatus(deployment) {
+  console.log('DeploymentListItem.vue computeStatus', {
+    status: deployment?.status,
+    nextTag: deployment?.nextTag,
+    deployed: deployment?.deployed,
+    hasErrors: deployment?.processingBranchErrors?.length > 0,
+    blacklistedBranches: deployment?.blacklistedBranches || [],
+    allBranchesBlacklisted: deployment?.blacklistedBranches?.length > 0 && 
+                            deployment?.processedBranches?.every(branch => 
+                              deployment.blacklistedBranches.includes(branch))
+  });
+  
   if (!deployment) return 'pending';
 
   const status = deployment.status;
   const logs = deployment.processingLogs || [];
 
   let some = str => logs.some(log => (log.message || '').toLowerCase().includes(str));
+  
+  // Check if all processed branches are blacklisted
+  const allBranchesBlacklisted = deployment.blacklistedBranches?.length > 0 && 
+                                deployment.processedBranches?.length > 0 && 
+                                deployment.processedBranches.every(branch => 
+                                  deployment.blacklistedBranches.includes(branch));
 
   if (status === 'processed' && deployment.deployed === true) {
     return 'deployed';
   }
-  if (deploymentHasLog(deployment, ['tag', 'already']) || deploymentHasLog(deployment, ['no', 'changes']) || !deployment.nextTag) {
+  
+  // If all branches are blacklisted, show as skipped
+  if (allBranchesBlacklisted) {
     return 'skipped';
   }
-  if (some('error') || some('fatal') || (deployment.processingBranchErrors && deployment.processingBranchErrors.length > 0)) {
+  
+  // Check for skipped status
+  if (deploymentHasLog(deployment, ['tag', 'already']) || 
+      deploymentHasLog(deployment, ['no', 'changes']) || 
+      !deployment.nextTag) {
+    return 'skipped';
+  }
+  
+  // Only consider it failed if there are errors on non-blacklisted branches
+  const hasErrors = some('error') || some('fatal') || (deployment.processingBranchErrors && deployment.processingBranchErrors.length > 0);
+  const blacklistedBranches = deployment.blacklistedBranches || [];
+  
+  const hasNonBlacklistedErrors = deployment.processingBranchErrors && 
+      deployment.processingBranchErrors.some(error => !blacklistedBranches.includes(error.branch));
+  
+  if (hasErrors && hasNonBlacklistedErrors) {
     return 'failed';
   }
-  if (status === 'processed') {
+  
+  if (status === 'processed' && deployment.nextTag) {
     return 'ready';
   }
+  
   // Handle 'processing' explicitly if needed, otherwise rely on backend status
   return status || 'pending';
 }

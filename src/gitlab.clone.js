@@ -133,44 +133,69 @@ async function cloneRepo() {
             throw new Error('Git directory not found after clone - possible incomplete clone');
         }
 
-        // Configure git to use fast-forward only for pulls to avoid divergent branches errors
-        console.log(`src/gitlab.js ${functionName} Configuring git pull.rebase false`, { targetDir });
-        await new Promise((resolve, reject) => {
-            const gitConfigProcess = spawn('git', ['config', 'pull.rebase', 'false'], {
-                cwd: targetDir,
-                stdio: ['ignore', 'pipe', 'pipe'],
-                env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
-            });
+        // Configure git pull settings to avoid divergent branches errors
+        console.log(`src/gitlab.js ${functionName} Configuring git pull settings`, { targetDir });
+        
+        // Function to run git config commands sequentially
+        const runGitConfig = async (configArgs) => {
+            return new Promise((resolve, reject) => {
+                console.log(`src/gitlab.js ${functionName} Running git config`, { configArgs });
+                const gitConfigProcess = spawn('git', configArgs, {
+                    cwd: targetDir,
+                    stdio: ['ignore', 'pipe', 'pipe'],
+                    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
+                });
 
-            let stdoutData = '';
-            let stderrData = '';
+                let stdoutData = '';
+                let stderrData = '';
 
-            gitConfigProcess.stdout.on('data', (data) => {
-                stdoutData += data;
-                console.log(`src/gitlab.js ${functionName} Git config stdout:`, data.toString());
-            });
+                gitConfigProcess.stdout.on('data', (data) => {
+                    stdoutData += data;
+                    console.log(`src/gitlab.js ${functionName} Git config stdout:`, data.toString());
+                });
 
-            gitConfigProcess.stderr.on('data', (data) => {
-                stderrData += data;
-                console.log(`src/gitlab.js ${functionName} Git config stderr:`, data.toString());
-            });
+                gitConfigProcess.stderr.on('data', (data) => {
+                    stderrData += data;
+                    console.log(`src/gitlab.js ${functionName} Git config stderr:`, data.toString());
+                });
 
-            gitConfigProcess.on('error', (err) => {
-                console.log(`src/gitlab.js ${functionName} Git config process error:`, { message: err.message, stack: err.stack });
-                reject(err);
-            });
+                gitConfigProcess.on('error', (err) => {
+                    console.log(`src/gitlab.js ${functionName} Git config process error:`, { message: err.message, stack: err.stack });
+                    reject(err);
+                });
 
-            gitConfigProcess.on('close', (code) => {
-                if (code === 0) {
-                    console.log(`src/gitlab.js ${functionName} Git config completed successfully`);
-                    resolve();
-                } else {
-                    console.log(`src/gitlab.js ${functionName} Git config failed with code ${code}`, { stdout: stdoutData, stderr: stderrData });
-                    // Don't reject here as the clone was successful
-                    resolve();
-                }
+                gitConfigProcess.on('close', (code) => {
+                    if (code === 0) {
+                        console.log(`src/gitlab.js ${functionName} Git config completed successfully`);
+                        resolve();
+                    } else {
+                        console.log(`src/gitlab.js ${functionName} Git config failed with code ${code}`, { stdout: stdoutData, stderr: stderrData });
+                        // Don't reject here as the clone was successful
+                        resolve();
+                    }
+                });
             });
-        });
+        };
+        
+        // Set multiple git config options to ensure one of them works
+        try {
+            // Option 1: Set pull.ff to only (fast-forward only)
+            await runGitConfig(['config', 'pull.ff', 'only']);
+            
+            // Option 2: Set pull.rebase to false (merge)
+            await runGitConfig(['config', 'pull.rebase', 'false']);
+            
+            // Option 3: Set merge.ff to only as well
+            await runGitConfig(['config', 'merge.ff', 'only']);
+            
+            // Option 4: Set a global git config in the repo
+            await runGitConfig(['config', '--local', 'pull.ff', 'only']);
+            
+            console.log(`src/gitlab.js ${functionName} All git configurations completed`);
+        } catch (err) {
+            console.log(`src/gitlab.js ${functionName} Error during git configuration`, { message: err.message, stack: err.stack });
+            // Don't throw here as the clone was successful
+        }
 
         // Wait before cleanup to ensure git has finished with temp files
         await new Promise(resolve => setTimeout(resolve, 2000));

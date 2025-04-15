@@ -19,10 +19,11 @@ RUN bun build ./src/server.js --outfile=dist/server.mjs --target node && cd fron
 
 FROM oven/bun:alpine
 
-# Install git
+# Install git and configure global settings to match local environment
 RUN apk add --no-cache git \
     && git --version \
-    && git config --global pull.ff only
+    && git config --global pull.rebase false \
+    && git config --global pull.twohead ort
 
 WORKDIR /usr/src/app
 

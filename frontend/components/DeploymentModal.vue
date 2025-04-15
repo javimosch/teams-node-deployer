@@ -35,22 +35,45 @@
             </div>
           </div>
           
-          <div v-if="deployment.blacklistedBranches && deployment.blacklistedBranches.length > 0">
-            <h4 class="text-sm font-medium text-gray-500 text-gray-600">Blacklisted Branches</h4>
-            <div class="mt-1 space-y-2">
-              <div v-for="(branch, index) in deployment.blacklistedBranches" :key="index" class="text-sm bg-gray-100 p-2 rounded-lg flex justify-between items-center">
-                <div class="flex items-center">
-                  <font-awesome-icon :icon="['fas', 'ban']" class="text-gray-500 mr-2" />
-                  <span class="text-gray-800">{{ branch }}</span>
+          <div>
+            <h4 class="text-sm font-medium text-gray-500">Branch Blacklist Management</h4>
+            <div class="mt-2 flex items-center gap-2">
+              <input 
+                v-model="newBlacklistBranch" 
+                type="text" 
+                placeholder="Enter branch name to blacklist" 
+                class="flex-grow px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button 
+                @click="addToBlacklist" 
+                :disabled="!newBlacklistBranch.trim()" 
+                class="px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center gap-1"
+              >
+                <font-awesome-icon :icon="['fas', 'plus']" />
+                Add
+              </button>
+            </div>
+            
+            <div v-if="deployment.blacklistedBranches && deployment.blacklistedBranches.length > 0" class="mt-3">
+              <h5 class="text-sm font-medium text-gray-500">Currently Blacklisted</h5>
+              <div class="mt-1 space-y-2">
+                <div v-for="(branch, index) in deployment.blacklistedBranches" :key="index" class="text-sm bg-gray-100 p-2 rounded-lg flex justify-between items-center">
+                  <div class="flex items-center">
+                    <font-awesome-icon :icon="['fas', 'ban']" class="text-gray-500 mr-2" />
+                    <span class="text-gray-800">{{ branch }}</span>
+                  </div>
+                  <button 
+                    @click="toggleBranchBlacklist(branch)" 
+                    class="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 flex items-center gap-1"
+                  >
+                    <font-awesome-icon :icon="['fas', 'times']" />
+                    Remove
+                  </button>
                 </div>
-                <button 
-                  @click="toggleBranchBlacklist(branch)" 
-                  class="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 flex items-center gap-1"
-                >
-                  <font-awesome-icon :icon="['fas', 'times']" />
-                  Remove
-                </button>
               </div>
+            </div>
+            <div v-else class="mt-2 text-sm text-gray-500 italic">
+              No branches blacklisted yet
             </div>
           </div>
            <div v-if="deployment.nextTag">
@@ -59,7 +82,8 @@
            </div>
           <div v-if="hasErrors">
             <h4 class="text-sm font-medium text-gray-500 text-red-600">Errors</h4>
-            <div class="mt-1 space-y-2">
+            <p class="text-xs text-gray-600 mt-1">You can optionally blacklist problematic branches to exclude them from future deployments.</p>
+            <div class="mt-2 space-y-2">
               <div v-for="(error, index) in deployment.processingBranchErrors" :key="index" class="text-sm text-red-600 bg-red-50 p-3 rounded-lg">
                 <div class="flex justify-between items-start">
                   <p class="font-medium">Branch: {{ error.branch }}</p>
@@ -143,6 +167,7 @@ const apiBase = config.public.apiBase;
 const deployment = ref(null);
 const isLoading = ref(false);
 const isActionLoading = ref(false);
+const newBlacklistBranch = ref('');
 
 // --- Helper Functions (Copied from DeploymentListItem, consider utils) ---
 function formatDate(dateString) {
@@ -162,15 +187,58 @@ function deploymentLogGet(dep, strs) {
 }
 
 function computeStatus(dep) {
+    console.log('DeploymentModal.vue computeStatus', {
+        status: dep?.status,
+        nextTag: dep?.nextTag,
+        deployed: dep?.deployed,
+        hasErrors: dep?.processingBranchErrors?.length > 0,
+        blacklistedBranches: dep?.blacklistedBranches || [],
+        processedBranches: dep?.processedBranches || [],
+        allBranchesBlacklisted: dep?.blacklistedBranches?.length > 0 && 
+                                dep?.processedBranches?.length > 0 && 
+                                dep?.processedBranches.every(branch => 
+                                  dep.blacklistedBranches.includes(branch))
+    });
+    
     if (!dep) return 'pending';
     const status = dep.status;
     const logs = dep.processingLogs || [];
     let some = str => logs.some(log => (log.message || '').toLowerCase().includes(str));
 
     if (status === 'processed' && dep.deployed === true) return 'deployed';
-    if (deploymentHasLog(dep, ['tag', 'already']) || deploymentHasLog(dep, ['no', 'changes']) || deploymentHasLog(dep, ['branch', 'not', 'exist'])) return 'skipped';
-    if (some('error') || some('fatal') || (dep.processingBranchErrors && dep.processingBranchErrors.length > 0)) return 'failed';
-    if (status === 'processed') return 'ready';
+    
+    // Check if all processed branches are blacklisted
+    const allBranchesBlacklisted = dep.blacklistedBranches?.length > 0 && 
+                                  dep.processedBranches?.length > 0 && 
+                                  dep.processedBranches.every(branch => 
+                                    dep.blacklistedBranches.includes(branch));
+    
+    // If all branches are blacklisted, show as skipped
+    if (allBranchesBlacklisted) {
+        return 'skipped';
+    }
+    
+    // Check for skipped status but only if there's no nextTag
+    const hasSkippedLogs = deploymentHasLog(dep, ['tag', 'already']) || 
+                          deploymentHasLog(dep, ['no', 'changes']) || 
+                          deploymentHasLog(dep, ['branch', 'not', 'exist']);
+                          
+    // Only return skipped if there's no nextTag AND we have skipped logs
+    if (hasSkippedLogs && !dep.nextTag) return 'skipped';
+    
+    // If we have errors but all errored branches are blacklisted, don't show as failed
+    const hasErrors = some('error') || some('fatal') || (dep.processingBranchErrors && dep.processingBranchErrors.length > 0);
+    const blacklistedBranches = dep.blacklistedBranches || [];
+    
+    // Only consider it failed if there are errors on non-blacklisted branches
+    const hasNonBlacklistedErrors = dep.processingBranchErrors && 
+        dep.processingBranchErrors.some(error => !blacklistedBranches.includes(error.branch));
+    
+    if (hasErrors && hasNonBlacklistedErrors) return 'failed';
+    
+    // If we have a nextTag and are processed, we're ready for approval
+    if (status === 'processed' && dep.nextTag) return 'ready';
+    
     return status || 'pending';
 }
 
@@ -206,19 +274,28 @@ const statusElement = computed(() => {
 const statusTitle = computed(() => {
     if (!deployment.value) return '';
     const status = computedStatus.value;
+    
+    // For skipped status, show the reason
     if (status === 'skipped') {
         const tagLog = deploymentLogGet(deployment.value, ['tag', 'already']);
         if (tagLog) return tagLog.message;
+        
         const noChangesLog = deploymentLogGet(deployment.value, ['no', 'changes']);
         if (noChangesLog) return noChangesLog.message;
-
+        
         const branchNotFoundLog = deploymentLogGet(deployment.value, ['branch', 'not', 'exist'])
         if (branchNotFoundLog) return branchNotFoundLog.message;
-
+        
         if (!deployment.value.nextTag) {
             return 'Tag not found';
         }
     }
+    
+    // For ready status with blacklisted branches, show a custom message
+    if (status === 'ready' && deployment.value.blacklistedBranches?.length > 0) {
+        return `Ready (${deployment.value.blacklistedBranches.length} branches blacklisted)`;
+    }
+    
     return statusInfo.value.label;
 });
 
@@ -235,8 +312,18 @@ const showCancelButton = computed(() => {
 });
 
 const showMarkPendingButton = computed(() => {
-    // Show if status is 'ready' or 'failed' but not canceled or deployed
-    return deployment.value && ['ready', 'failed'].includes(computedStatus.value) && !isCanceled.value && !isDeployed.value;
+    console.log('DeploymentModal.vue showMarkPendingButton', {
+        status: computedStatus.value,
+        isCanceled: isCanceled.value,
+        isDeployed: isDeployed.value
+    });
+    
+    // Show if status is 'ready', 'failed', 'skipped', or 'processed' but not canceled or deployed
+    // This allows users to mark as pending even when all branches are blacklisted
+    return deployment.value && 
+           ['ready', 'failed', 'skipped', 'processed'].includes(computedStatus.value) && 
+           !isCanceled.value && 
+           !isDeployed.value;
 });
 
 
@@ -249,8 +336,59 @@ function isBranchBlacklisted(branch) {
   return (deployment.value?.blacklistedBranches || []).includes(branch);
 }
 
+async function addToBlacklist() {
+  console.log('DeploymentModal.vue addToBlacklist', { 
+    branch: newBlacklistBranch.value,
+    currentBlacklist: deployment.value?.blacklistedBranches || []
+  });
+  
+  if (!newBlacklistBranch.value.trim()) return;
+  
+  // Check if branch is already blacklisted
+  if (isBranchBlacklisted(newBlacklistBranch.value)) {
+    emit('action-error', `Branch "${newBlacklistBranch.value}" is already blacklisted.`);
+    return;
+  }
+  
+  let updatedBlacklist = [...(deployment.value?.blacklistedBranches || []), newBlacklistBranch.value];
+  
+  console.log('DeploymentModal.vue addToBlacklist sending request', {
+    id: deployment.value.id,
+    updatedBlacklist
+  });
+  
+  try {
+    const updatedDeployment = await $fetch(`${apiBase}/deployments`, {
+      method: 'PUT',
+      body: {
+        id: deployment.value.id,
+        blacklistedBranches: updatedBlacklist
+      }
+    });
+    
+    console.log('DeploymentModal.vue addToBlacklist response', {
+      blacklistedBranches: updatedDeployment.blacklistedBranches || []
+    });
+    
+    // Directly update the deployment value to ensure UI updates
+    deployment.value = updatedDeployment;
+    
+    emit('update:deployment', updatedDeployment);
+    newBlacklistBranch.value = ''; // Clear the input field
+  } catch (error) {
+    console.log('DeploymentModal.vue addToBlacklist error', {
+      message: error.message,
+      stack: error.stack
+    });
+    emit('action-error', `Error adding branch to blacklist: ${error.message || 'Unknown error'}`);
+  }
+}
+
 async function toggleBranchBlacklist(branch) {
-  console.log('DeploymentModal.vue toggleBranchBlacklist', { branch });
+  console.log('DeploymentModal.vue toggleBranchBlacklist', { 
+    branch,
+    currentBlacklist: deployment.value?.blacklistedBranches || []
+  });
   
   let updatedBlacklist = [...(deployment.value?.blacklistedBranches || [])];
   
@@ -262,6 +400,11 @@ async function toggleBranchBlacklist(branch) {
     updatedBlacklist.push(branch);
   }
   
+  console.log('DeploymentModal.vue toggleBranchBlacklist sending request', {
+    id: deployment.value.id,
+    updatedBlacklist
+  });
+  
   try {
     const updatedDeployment = await $fetch(`${apiBase}/deployments`, {
       method: 'PUT',
@@ -270,6 +413,13 @@ async function toggleBranchBlacklist(branch) {
         blacklistedBranches: updatedBlacklist
       }
     });
+    
+    console.log('DeploymentModal.vue toggleBranchBlacklist response', {
+      blacklistedBranches: updatedDeployment.blacklistedBranches || []
+    });
+    
+    // Directly update the deployment value to ensure UI updates
+    deployment.value = updatedDeployment;
     
     emit('update:deployment', updatedDeployment);
   } catch (error) {
@@ -290,16 +440,28 @@ async function fetchDeploymentDetails() {
     try {
         if (!inject('findDeploymentById', null)) {
             try {
+                console.log('DeploymentModal.vue fetchDeploymentDetails fetching deployments');
                 const data = await $fetch(`${apiBase}/deployments`); // Fetch all and find
                 deployment.value = data.find(d => d.id === props.deploymentId);
+                console.log('DeploymentModal.vue fetchDeploymentDetails deployment found', {
+                    id: deployment.value?.id,
+                    blacklistedBranches: deployment.value?.blacklistedBranches || [],
+                    status: deployment.value?.status
+                });
             } catch (fetchErr) {
-                console.error("Failed to fetch deployment details:", fetchErr);
+                console.log("DeploymentModal.vue fetchDeploymentDetails error", {
+                    message: fetchErr.message,
+                    stack: fetchErr.stack
+                });
                 emit('action-error', 'Failed to load deployment details.');
                 deployment.value = null;
             }
         }
     } catch (error) {
-        console.error('Error fetching deployment details:', error);
+        console.log('DeploymentModal.vue fetchDeploymentDetails error', {
+            message: error.message,
+            stack: error.stack
+        });
         emit('action-error', 'Failed to load deployment details.');
         deployment.value = null;
     } finally {

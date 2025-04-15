@@ -58,6 +58,13 @@ async function deployTicket(deployment, repoPath) {
 
     deployment.processingBranchErrors = [];
     deployment.processingLogs = [];
+    // Ensure blacklistedBranches is initialized but preserved
+    deployment.blacklistedBranches = deployment.blacklistedBranches || [];
+    
+    console.log(`src/gitlab.js ${functionName} Deployment initialized`, {
+        id: deployment.id,
+        blacklistedBranches: deployment.blacklistedBranches
+    });
 
     try {
         console.log(`src/gitlab.js ${functionName} Starting deployment processing`, { deployment });
@@ -88,8 +95,15 @@ async function deployTicket(deployment, repoPath) {
 
                 deployment.processingLogs = deployment.processingLogs || [];
 
-                if (deployment.blacklistedBranches || [].some(blacklisted => branch.includes(blacklisted))) {
-                    console.log(`src/gitlab.js ${functionName} Skipping blacklisted branch`, { branch });
+                // Check if this branch is in the blacklist
+                const blacklistedBranches = deployment.blacklistedBranches || [];
+                console.log(`src/gitlab.js ${functionName} Checking if branch is blacklisted`, {
+                    branch,
+                    blacklistedBranches
+                });
+                
+                if (blacklistedBranches.some(blacklisted => branch === blacklisted || branch.includes(blacklisted))) {
+                    console.log(`src/gitlab.js ${functionName} Skipping blacklisted branch`, { branch, blacklistedBranches: deployment.blacklistedBranches });
                     deployment.processingLogs.push({
                         branch,
                         message: `Branch blacklisted`
