@@ -69,7 +69,7 @@ async function detectBranchesWithAI(content) {
         
         try {
             const result = JSON.parse(responseText);
-            const branches = result.branches || [];
+            let branches = result.branches || [];
 
             console.log('INFO: detected branches (with AI):', {branches});
 

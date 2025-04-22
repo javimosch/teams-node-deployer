@@ -57,39 +57,92 @@ async function checkoutBranch(repoPath, branchName) {
 async function pullBranch(repoPath, branchName) {
     const fileName = 'git-utils.js';
     const functionName = 'pullBranch';
-    
+
     console.log(`${fileName} ${functionName} Attempting to pull branch`, { repoPath, branchName });
-    
-    const result = await executeGitCommand(repoPath, `pull origin ${branchName}`);
-    
-    if (!result.success) {
-        console.log(`${fileName} ${functionName} Pull failed`, {
+
+    try {
+        // Debug: Log current repository state
+        const status = await executeGitCommand(repoPath, 'status');
+        console.log(`${fileName} ${functionName} Git status before pull: ${status.output || status}`);
+
+        // Fetch the remote branch to ensure latest data
+        const fetchResult = await executeGitCommand(repoPath, `fetch origin ${branchName}`);
+        if (!fetchResult.success) {
+            console.error(`${fileName} ${functionName} Fetch failed`, {
+                repoPath,
+                branchName,
+                output: fetchResult.output,
+                error: fetchResult.error
+            });
+            return fetchResult;
+        }
+        console.log(`${fileName} ${functionName} Fetch completed for origin/${branchName}`);
+
+        // Pull with explicit merge strategy: prefer fast-forward, fall back to merge
+        const result = await executeGitCommand(repoPath, `pull --no-rebase --ff origin ${branchName}`);
+        if (!result.success) {
+            console.error(`${fileName} ${functionName} Pull failed`, {
+                repoPath,
+                branchName,
+                output: result.output,
+                error: result.error
+            });
+
+            // Check for merge conflicts
+            const conflicts = await executeGitCommand(repoPath, 'diff --name-only --diff-filter=U');
+            if (conflicts.output || result.error.includes('CONFLICT') || result.output.includes('CONFLICT')) {
+                console.log(`${fileName} ${functionName} Merge conflict detected, attempting to abort`, { repoPath, branchName });
+                const abortResult = await executeGitCommand(repoPath, 'merge --abort');
+                if (!abortResult.success) {
+                    console.error(`${fileName} ${functionName} Merge abort failed`, {
+                        repoPath,
+                        branchName,
+                        output: abortResult.output,
+                        error: abortResult.error
+                    });
+                } else {
+                    console.log(`${fileName} ${functionName} Merge aborted successfully`);
+                }
+                // Reset to remote state to ensure clean repository
+                const resetResult = await executeGitCommand(repoPath, `reset --hard origin/${branchName}`);
+                if (!resetResult.success) {
+                    console.error(`${fileName} ${functionName} Reset failed`, {
+                        repoPath,
+                        branchName,
+                        output: resetResult.output,
+                        error: resetResult.error
+                    });
+                } else {
+                    console.log(`${fileName} ${functionName} Reset to origin/${branchName}`);
+                }
+                return {
+                    success: false,
+                    output: result.output,
+                    error: 'CONFLICT: Merge conflict detected - merge aborted and reset to origin'
+                };
+            }
+            return result;
+        }
+
+        // Debug: Log status after pull
+        const postStatus = await executeGitCommand(repoPath, 'status');
+        console.log(`${fileName} ${functionName} Git status after pull: ${postStatus.output || postStatus}`);
+
+        console.log(`${fileName} ${functionName} Pull successful`, { repoPath, branchName, output: result.output });
+        return result;
+    } catch (err) {
+        console.error(`${fileName} ${functionName} Unexpected error during pull`, {
             repoPath,
             branchName,
-            output: result.output,
-            error: result.error
+            message: err.message,
+            stack: err.stack
         });
-        
-        if (result.error.includes('CONFLICT')||result.output.includes('CONFLICT')) {
-            console.log(`${fileName} ${functionName} Merge conflict detected, attempting to abort`, { repoPath, branchName });
-            // Abort merge on conflict
-            const abortResult = await executeGitCommand(repoPath, `merge --abort`);
-            if (!abortResult.success) {
-                console.log(`${fileName} ${functionName} Merge abort failed`, {
-                    repoPath,
-                    branchName,
-                    output: abortResult.output,
-                    error: abortResult.error
-                });
-            }
-            return { 
-                success: false, 
-                output: result.output,
-                error: 'CONFLICT: Merge conflict detected - merge aborted'
-            };
-        }
+        return {
+            success: false,
+            output: '',
+            error: `Unexpected error: ${err.message}`
+        };
     }
-    return result;
 }
 
 /**

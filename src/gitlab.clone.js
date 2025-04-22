@@ -7,6 +7,26 @@ const { getData, setDataPushUpdateIfExists, setData } = require("./db");
 const connectorService = require('./services/connector-service');
 
 /**
+ * Ensures that the cloned repository is configured to use fast-forward merges.
+ * This is necessary because some GitLab repositories may have merge commits that
+ * are not fast-forward, which can cause issues during deployment.
+ * @param {Function} runGitConfig - Function to run git config commands sequentially
+ */
+async function ensureRepoIsConfigured(runGitConfig) {
+    const fileName = 'git-utils.js';
+    const functionName = 'ensureRepoIsConfigured';
+    try {
+        await runGitConfig(['config', '--global', 'pull.rebase', 'false']);
+        await runGitConfig(['config', '--global', 'pull.ff', 'true']);
+        await runGitConfig(['config', '--global', 'user.email', process.env.GITLAB_USER_EMAIL]);
+        await runGitConfig(['config', '--global', 'user.name', process.env.GITLAB_USER_NAME]);
+        console.log(`${fileName} ${functionName} Git configurations completed`);
+    } catch (err) {
+        console.error(`${fileName} ${functionName} Error during git configuration`, { message: err.message, stack: err.stack });
+    }
+}
+
+/**
  * Clone repository using a specific connector
  * @param {String} repoName Repository name to clone
  * @param {String} connectorId Connector ID to use for cloning (optional - uses first active if not provided)
@@ -14,7 +34,7 @@ const connectorService = require('./services/connector-service');
  */
 async function cloneRepo(repoName, connectorId) {
     const functionName = 'cloneRepo';
-    
+
     // If no repoName provided, use GITLAB_REPO_NAME from env
     if (!repoName) {
         repoName = process.env.GITLAB_REPO_NAME;
@@ -23,10 +43,10 @@ async function cloneRepo(repoName, connectorId) {
             throw new Error('Repository name not provided and GITLAB_REPO_NAME not found in environment');
         }
     }
-    
+
     // Get the connector to use
     let connector;
-    
+
     if (connectorId) {
         // Use specific connector if ID provided
         connector = await connectorService.getConnectorById(connectorId);
@@ -53,9 +73,9 @@ async function cloneRepo(repoName, connectorId) {
             connector = activeConnectors[0];
         }
     }
-    
-    console.log(`src/gitlab.clone.js ${functionName} Using connector`, { 
-        connectorType: connector.type, 
+
+    console.log(`src/gitlab.clone.js ${functionName} Using connector`, {
+        connectorType: connector.type,
         connectorUrl: connector.url,
         connectorName: connector.name
     });
@@ -82,10 +102,52 @@ async function cloneRepo(repoName, connectorId) {
 
         const targetDir = path.join(tmpDir, repoDetails.path);
 
+        // Function to run git config commands sequentially
+        const runGitConfig = async (configArgs) => {
+            return new Promise((resolve, reject) => {
+                console.log(`src/gitlab.js ${functionName} Running git config`, { configArgs });
+                const gitConfigProcess = spawn('git', configArgs, {
+                    cwd: targetDir,
+                    stdio: ['ignore', 'pipe', 'pipe'],
+                    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
+                });
+
+                let stdoutData = '';
+                let stderrData = '';
+
+                gitConfigProcess.stdout.on('data', (data) => {
+                    stdoutData += data;
+                    console.log(`src/gitlab.js ${functionName} Git config stdout:`, data.toString());
+                });
+
+                gitConfigProcess.stderr.on('data', (data) => {
+                    stderrData += data;
+                    console.log(`src/gitlab.js ${functionName} Git config stderr:`, data.toString());
+                });
+
+                gitConfigProcess.on('error', (err) => {
+                    console.log(`src/gitlab.js ${functionName} Git config process error:`, { message: err.message, stack: err.stack });
+                    reject(err);
+                });
+
+                gitConfigProcess.on('close', (code) => {
+                    if (code === 0) {
+                        console.log(`src/gitlab.js ${functionName} Git config completed successfully`);
+                        resolve();
+                    } else {
+                        console.log(`src/gitlab.js ${functionName} Git config failed with code ${code}`, { stdout: stdoutData, stderr: stderrData });
+                        // Don't reject here as the clone was successful
+                        resolve();
+                    }
+                });
+            });
+        };
+
         try {
             const stats = await fs.stat(targetDir);
             if (stats) {
                 console.log(`src/gitlab.js ${functionName} Target directory already exists`, { targetDir });
+                await ensureRepoIsConfigured(runGitConfig);
                 return targetDir;
             }
         } catch (err) {
@@ -178,67 +240,10 @@ async function cloneRepo(repoName, connectorId) {
 
         // Configure git pull settings to avoid divergent branches errors
         console.log(`src/gitlab.js ${functionName} Configuring git pull settings`, { targetDir });
-        
-        // Function to run git config commands sequentially
-        const runGitConfig = async (configArgs) => {
-            return new Promise((resolve, reject) => {
-                console.log(`src/gitlab.js ${functionName} Running git config`, { configArgs });
-                const gitConfigProcess = spawn('git', configArgs, {
-                    cwd: targetDir,
-                    stdio: ['ignore', 'pipe', 'pipe'],
-                    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
-                });
 
-                let stdoutData = '';
-                let stderrData = '';
 
-                gitConfigProcess.stdout.on('data', (data) => {
-                    stdoutData += data;
-                    console.log(`src/gitlab.js ${functionName} Git config stdout:`, data.toString());
-                });
 
-                gitConfigProcess.stderr.on('data', (data) => {
-                    stderrData += data;
-                    console.log(`src/gitlab.js ${functionName} Git config stderr:`, data.toString());
-                });
-
-                gitConfigProcess.on('error', (err) => {
-                    console.log(`src/gitlab.js ${functionName} Git config process error:`, { message: err.message, stack: err.stack });
-                    reject(err);
-                });
-
-                gitConfigProcess.on('close', (code) => {
-                    if (code === 0) {
-                        console.log(`src/gitlab.js ${functionName} Git config completed successfully`);
-                        resolve();
-                    } else {
-                        console.log(`src/gitlab.js ${functionName} Git config failed with code ${code}`, { stdout: stdoutData, stderr: stderrData });
-                        // Don't reject here as the clone was successful
-                        resolve();
-                    }
-                });
-            });
-        };
-        
-        // Set multiple git config options to ensure one of them works
-        try {
-            // Option 1: Set pull.ff to only (fast-forward only)
-            await runGitConfig(['config', 'pull.ff', 'only']);
-            
-            // Option 2: Set pull.rebase to false (merge)
-            await runGitConfig(['config', 'pull.rebase', 'false']);
-            
-            // Option 3: Set merge.ff to only as well
-            await runGitConfig(['config', 'merge.ff', 'only']);
-            
-            // Option 4: Set a global git config in the repo
-            await runGitConfig(['config', '--local', 'pull.ff', 'only']);
-            
-            console.log(`src/gitlab.js ${functionName} All git configurations completed`);
-        } catch (err) {
-            console.log(`src/gitlab.js ${functionName} Error during git configuration`, { message: err.message, stack: err.stack });
-            // Don't throw here as the clone was successful
-        }
+        await ensureRepoIsConfigured(runGitConfig);
 
         // Wait before cleanup to ensure git has finished with temp files
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -286,10 +291,10 @@ async function getRepoDetailsByName(name, connector) {
             console.log(`src/gitlab.clone.js ${functionName} Unsupported connector type`, { type: connector.type });
             throw new Error(`Unsupported connector type: ${connector.type}`);
         }
-        
+
         // Create a cache key based on connector and repo name to avoid conflicts
         const cacheKey = `repoDetails_${connector.id || 'default'}_${name}`;
-        
+
         console.log(`src/gitlab.clone.js ${functionName} Checking cache for repo details`, { name, cacheKey });
         let repoDetails = (await getData(cacheKey)) || null;
         if (repoDetails && repoDetails.path === name) { // Ensure cached details match requested name
@@ -343,7 +348,7 @@ async function getRepoDetailsByName(name, connector) {
         if (foundProject) {
             console.log(`src/gitlab.clone.js ${functionName} Caching found project details`, { foundProject });
             // Cache with the connector-specific key
-            await setData(cacheKey, foundProject); 
+            await setData(cacheKey, foundProject);
         } else {
             console.log(`src/gitlab.clone.js ${functionName} Project not found after pagination`, { name });
         }

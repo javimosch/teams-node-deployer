@@ -24,7 +24,8 @@ const EVENT_TYPES = {
   ERROR: 'error'
 };
 
-ensureDbFile().then(() => {
+ensureDbFile().then(async() => {
+    await connectorRoutes.initializeDefaultConnector();
     configureCronJobs();
 });
 
@@ -45,14 +46,8 @@ if (process.env.BASIC_AUTH_USERNAME && process.env.BASIC_AUTH_PASSWORD) {
 }
 
 async function getDeployments() {
-    let data
-    try {
-        data = JSON.parse(await fs.readFile(path.join(process.cwd(), 'data.json'), 'utf8'));
-    } catch (e) {
-        console.error('Error reading data.json:', e)
-        return []
-    }
-    return (data.deployments || []).sort((a, b) => {
+    const deployments = await getData('deployments')
+    return (deployments || []).sort((a, b) => {
         const aDate = new Date(a.updatedAt ?? a.createdAt).getTime();
         const bDate = new Date(b.updatedAt ?? b.createdAt).getTime();
         return bDate - aDate;
@@ -160,15 +155,10 @@ app.post('/api/deployments', async (req, res) => {
 app.put('/api/deployments', async (req, res) => {
     const { id, status, approved, blacklistedBranches } = req.body
     console.log('server.js updateDeployment', { id, status, blacklistedBranches })
-    let data;
-    try {
-        data = JSON.parse(await fs.readFile(path.join(process.cwd(), 'data.json'), 'utf8'));
-    } catch (e) {
-        console.error('Error reading data.json for update:', e);
-        return res.status(500).send('Error reading database file.');
-    }
+    
+    let data = await getAllData();
 
-    const deploymentIndex = data.deployments.findIndex(d => d.id === id);
+    const deploymentIndex = (data.deployments || []).findIndex(d => d.id === id);
     if (deploymentIndex === -1) {
         return res.status(404).send('Deployment not found');
     }
@@ -214,12 +204,7 @@ app.put('/api/deployments', async (req, res) => {
     deployment.updatedAt = new Date().toISOString()
     data.deployments[deploymentIndex] = deployment;
 
-    try {
-        await fs.writeFile(path.join(process.cwd(), 'data.json'), JSON.stringify(data, null, 2));
-    } catch (e) {
-        console.error('Error writing data.json after update:', e);
-        return res.status(500).send('Error saving database changes.');
-    }
+    await setData('deployments', data.deployments);
 
     if (approved === true) {
         console.log(`Deployment ${id} approved, triggering processing.`);
@@ -240,15 +225,9 @@ app.put('/api/deployments', async (req, res) => {
 
 app.post('/api/deployments/:id/cancel', async (req, res) => {
     console.log('server.js cancelDeployment', { id: req.params.id })
-    let data;
-     try {
-        data = JSON.parse(await fs.readFile(path.join(process.cwd(), 'data.json'), 'utf8'));
-    } catch (e) {
-        console.error('Error reading data.json for cancel:', e);
-        return res.status(500).send('Error reading database file.');
-    }
+    let data = await getAllData();
 
-    const deploymentIndex = data.deployments.findIndex(d => d.id === req.params.id);
+    const deploymentIndex = (data.deployments || []).findIndex(d => d.id === req.params.id);
      if (deploymentIndex === -1) {
         return res.status(404).send('Deployment not found');
     }
@@ -263,13 +242,8 @@ app.post('/api/deployments/:id/cancel', async (req, res) => {
     deployment.updatedAt = new Date().toISOString()
     data.deployments[deploymentIndex] = deployment;
 
-    try {
-        await fs.writeFile(path.join(process.cwd(), 'data.json'), JSON.stringify(data, null, 2));
-        res.send('Deployment canceled');
-    } catch (e) {
-        console.error('Error writing data.json after cancel:', e);
-        res.status(500).send('Error saving database changes.');
-    }
+    await setData('deployments', data.deployments);
+    res.send('Deployment canceled');
 })
 
 app.post('/api/deployments/process', async (req, res) => {

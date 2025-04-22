@@ -5,7 +5,7 @@ services:
     expose:
       - "3000"
     volumes:
-      - data-json:/usr/src/app/tmp/data.json  # Named volume targeting a file
+      - data-json:/usr/src/app/data.json  # Named volume targeting a file
       - tmp:/usr/src/app/tmp                  # Named volume for directory
 volumes:
   data-json:                                 # Named volume for the file

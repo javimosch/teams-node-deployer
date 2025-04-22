@@ -6,17 +6,7 @@ const express = require('express');
 const router = express.Router();
 const connectorService = require('../services/connector-service');
 
-// Initialize default connector if none exist
-(async () => {
-    try {
-        await connectorService.initializeDefaultConnector();
-    } catch (err) {
-        console.log(`routes/connectors.js initialization Error initializing default connector`, {
-            message: err.message,
-            stack: err.stack
-        });
-    }
-})();
+
 
 /**
  * GET /api/connectors
@@ -228,3 +218,16 @@ router.delete('/:id', async (req, res) => {
 });
 
 module.exports = router;
+
+
+// Initialize default connector if none exist
+module.exports.initializeDefaultConnector = async () => {
+    try {
+        await connectorService.initializeDefaultConnector();
+    } catch (err) {
+        console.log(`routes/connectors.js initialization Error initializing default connector`, {
+            message: err.message,
+            stack: err.stack
+        });
+    }
+}

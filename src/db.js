@@ -1,11 +1,22 @@
 const fs = require("fs");
+const path = require('path');
+
+const DB_FILE_DIR = process.env.DB_FILE_DIR || './data';
+const DB_FILE_PATH = path.join(DB_FILE_DIR, 'data.json');
+
+console.log('DB_FILE_DIR', DB_FILE_DIR)
+console.log('DB_FILE_PATH', DB_FILE_PATH)
 
 async function ensureDbFile(){
     try {
-        console.log('Checking for data.json')
-        await fs.promises.access('data.json');
+        let access = await fs.promises.access(DB_FILE_PATH);
+        console.log('Checking for data.json',{
+            access
+        })
+        
     } catch (error) {
-        await fs.promises.writeFile('data.json', JSON.stringify({}), 'utf8');
+        
+        await fs.promises.writeFile(DB_FILE_PATH, JSON.stringify({}), 'utf8');
         console.log('Created data.json')
     }
 }
@@ -20,7 +31,7 @@ async function persistRefreshToken(refreshToken) {
 
 async function getData(key, defaultValue = null) {
     try {
-        const data = JSON.parse(await fs.promises.readFile('data.json', 'utf8'));
+        const data = JSON.parse(await fs.promises.readFile(DB_FILE_PATH, 'utf8'));
         return data[key] || defaultValue;
     } catch (error) {
         console.error(`Error getting ${key}:`, error);
@@ -30,9 +41,9 @@ async function getData(key, defaultValue = null) {
 
 async function setData(key, value) {
     try {
-        const data = JSON.parse(await fs.promises.readFile('data.json', 'utf8'));
+        const data = JSON.parse(await fs.promises.readFile(DB_FILE_PATH, 'utf8'));
         data[key] = value;
-        await fs.promises.writeFile('data.json', JSON.stringify(data, null, 2));
+        await fs.promises.writeFile(DB_FILE_PATH, JSON.stringify(data, null, 2));
         /* console.log(`${key} persisted successfully`, {
             value: typeof value === 'string' ? value.slice(0, 10) + '...' : '(Object)'
         }) */;
@@ -102,7 +113,7 @@ async function pruneDupes(key,idKey='id'){
 
 async function getAllData() {
     try {
-        const data = await fs.promises.readFile('data.json', 'utf8');
+        const data = await fs.promises.readFile(DB_FILE_PATH, 'utf8');
         return JSON.parse(data);
     } catch (error) {
         console.error(`Error getting all data:`, error);
@@ -120,7 +131,7 @@ async function setAllData(newData) {
         if (typeof newData !== 'object' || newData === null) {
             throw new Error('Invalid data format: Must be a JSON object.');
         }
-        await fs.promises.writeFile('data.json', JSON.stringify(newData, null, 2));
+        await fs.promises.writeFile(DB_FILE_PATH, JSON.stringify(newData, null, 2));
         console.log('Database overwritten successfully.');
     } catch (error) {
         console.error(`Error setting all data:`, error);

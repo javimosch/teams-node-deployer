@@ -9,3 +9,14 @@ services:
       - .env
     environment:
       - PORT=3000
+    volumes:
+      - data:/usr/src/app/data
+      - tmp:/usr/src/app/tmp                  # Named volume for directory
+    restart: always
+volumes:
+  data:                                 # Named volume for the file
+    driver: local
+    name: teams-node-deployer-data
+  tmp:                                      # Named volume for the directory
+    driver: local
+    name: teams-node-deployer-tmp
